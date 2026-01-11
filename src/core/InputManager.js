@@ -97,7 +97,13 @@ export class InputManager {
       const centerY = this.canvas.height / 2;
       const angle1 = Math.atan2(lastTouch.y - centerY, lastTouch.x - centerX);
       const angle2 = Math.atan2(coords.y - centerY, coords.x - centerX);
-      this.dragAngle += angle2 - angle1;
+
+      // 각도 변화량 계산 (래핑 처리)
+      let deltaAngle = angle2 - angle1;
+      if (deltaAngle > Math.PI) deltaAngle -= Math.PI * 2;
+      if (deltaAngle < -Math.PI) deltaAngle += Math.PI * 2;
+
+      this.dragAngle += deltaAngle;
     }
 
     this.touches.push(coords);
@@ -171,6 +177,21 @@ export class InputManager {
     const dx = coords.x - lastTouch.x;
     const dy = coords.y - lastTouch.y;
     this.dragDistance += Math.sqrt(dx * dx + dy * dy);
+
+    // 각도 계산 (원형 드래그용) - 마우스에서도 동일하게 계산
+    if (this.touchStart) {
+      const centerX = this.canvas.width / 2;
+      const centerY = this.canvas.height / 2;
+      const angle1 = Math.atan2(lastTouch.y - centerY, lastTouch.x - centerX);
+      const angle2 = Math.atan2(coords.y - centerY, coords.x - centerX);
+
+      // 각도 변화량 계산 (래핑 처리)
+      let deltaAngle = angle2 - angle1;
+      if (deltaAngle > Math.PI) deltaAngle -= Math.PI * 2;
+      if (deltaAngle < -Math.PI) deltaAngle += Math.PI * 2;
+
+      this.dragAngle += deltaAngle;
+    }
 
     this.touches.push(coords);
 

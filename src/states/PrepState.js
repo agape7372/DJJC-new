@@ -61,6 +61,7 @@ export class PrepState extends BaseState {
     this.overheatedTimer = 0;
     this.doughPhase = 0; // 반죽 상태 0~1
     this.spinAngle = 0;
+    this.lastDragAngle = 0; // delta angle 계산용
   }
 
   enter() {
@@ -104,6 +105,7 @@ export class PrepState extends BaseState {
       this.isOverheated = false;
       this.doughPhase = 0;
       this.spinAngle = 0;
+      this.lastDragAngle = 0;
     }
 
     this.game.sound.playUIClick();
@@ -137,12 +139,18 @@ export class PrepState extends BaseState {
 
     // 마시멜로우 게임 회전
     if (this.phase === 2 && !this.isOverheated) {
-      const rpmIncrease = Math.abs(angle) * 80;
+      // delta angle 계산 (부호 있는 값과 절대값 분리)
+      const signedDelta = angle - this.lastDragAngle;
+      const deltaAngle = Math.abs(signedDelta);
+      this.lastDragAngle = angle;
+
+      // deltaAngle 기반으로 RPM 증가 (스케일 조정)
+      const rpmIncrease = deltaAngle * 120;
       this.rpm = Math.min(100, this.rpm + rpmIncrease);
-      this.spinAngle += angle;
+      this.spinAngle += signedDelta; // 방향 유지한 회전
 
       // 스핀 효과음 & 파티클
-      if (rpmIncrease > 0.5) {
+      if (deltaAngle > 0.02) {
         this.game.sound.playSpin(this.rpm);
 
         const centerX = this.config.width / 2;
@@ -273,8 +281,9 @@ export class PrepState extends BaseState {
 
     // 카다이프 이동
     this.kadaifs.forEach(k => {
+      k.x += k.vx * dt; // 수평 이동 추가
       k.y += k.vy * dt;
-      k.vy += 350 * dt; // 중력
+      k.vy += 380 * dt; // 중력 (약간 증가)
       k.rotation += k.rotSpeed * dt;
     });
 
@@ -304,16 +313,40 @@ export class PrepState extends BaseState {
     else if (rand < 0.12) type = 'golden';
     else if (rand < 0.20) type = 'premium';
 
-    const fromLeft = Math.random() > 0.5;
-    const x = fromLeft ? -30 : this.config.width + 30;
-    const targetX = this.config.width / 2 + (Math.random() - 0.5) * 200;
+    // 개선된 스폰 로직: 더 넓은 스폰 영역, 더 강한 수평 속도
+    const spawnPattern = Math.random();
+    let x, targetX, vx, vy;
+
+    if (spawnPattern < 0.4) {
+      // 패턴 1: 화면 하단 좌우에서 대각선으로 올라옴
+      const fromLeft = Math.random() > 0.5;
+      x = fromLeft ? 30 : this.config.width - 30;
+      targetX = this.config.width / 2 + (Math.random() - 0.5) * 100;
+      vx = (targetX - x) * 0.025; // 더 강한 수평 속도
+      vy = -520 - Math.random() * 100;
+    } else if (spawnPattern < 0.7) {
+      // 패턴 2: 화면 중앙 하단에서 위로
+      x = this.config.width * 0.3 + Math.random() * this.config.width * 0.4;
+      targetX = x + (Math.random() - 0.5) * 60;
+      vx = (targetX - x) * 0.02;
+      vy = -580 - Math.random() * 80;
+    } else {
+      // 패턴 3: 화면 측면에서 포물선
+      const fromLeft = Math.random() > 0.5;
+      x = fromLeft ? -20 : this.config.width + 20;
+      targetX = fromLeft ?
+        this.config.width * 0.4 + Math.random() * this.config.width * 0.2 :
+        this.config.width * 0.2 + Math.random() * this.config.width * 0.2;
+      vx = (targetX - x) * 0.03; // 더 빠른 수평 이동
+      vy = -450 - Math.random() * 100;
+    }
 
     this.kadaifs.push({
       x,
-      y: this.config.height + 30,
-      vx: (targetX - x) * 0.015,
-      vy: -450 - Math.random() * 150,
-      size: 45 + Math.random() * 15,
+      y: this.config.height + 20,
+      vx,
+      vy,
+      size: 50 + Math.random() * 15, // 약간 더 큰 크기
       rotation: 0,
       rotSpeed: (Math.random() - 0.5) * 6,
       type,
