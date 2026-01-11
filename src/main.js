@@ -7,15 +7,33 @@ import { Game } from './core/Game.js';
 // 게임 인스턴스 생성 및 시작
 const game = new Game('game-canvas');
 
+// 게임 초기화 함수
+async function startGame() {
+  try {
+    await game.init();
+  } catch (error) {
+    console.error('게임 초기화 실패:', error);
+    // 에러 발생 시 화면에 표시
+    const canvas = document.getElementById('game-canvas');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      canvas.width = 390;
+      canvas.height = 844;
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(0, 0, 390, 844);
+      ctx.fillStyle = '#ff0000';
+      ctx.font = '16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Error: ' + error.message, 195, 400);
+    }
+  }
+}
+
 // DOM 로드 완료 후 게임 초기화
-// 모듈 스크립트는 deferred되므로 이미 로드되었을 수 있음
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => {
-    game.init();
-  });
+  document.addEventListener('DOMContentLoaded', startGame);
 } else {
-  // DOM이 이미 로드됨
-  game.init();
+  startGame();
 }
 
 // 전역 접근용 (디버깅)
