@@ -81,7 +81,7 @@ export class SoundManager {
     // 엔벨로프
     const gain = this.audioContext.createGain();
     gain.gain.setValueAtTime(0.8, now);
-    gain.gain.exponentialDecayTo(0.01, now + duration);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
 
     noiseSource.connect(filter);
     filter.connect(gain);
@@ -117,7 +117,7 @@ export class SoundManager {
 
       const gain = this.audioContext.createGain();
       gain.gain.setValueAtTime(0.5, now + delay);
-      gain.gain.exponentialDecayTo(0.01, now + duration);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
 
       noiseSource.connect(filter);
       filter.connect(gain);
@@ -144,7 +144,7 @@ export class SoundManager {
 
     const gain = this.audioContext.createGain();
     gain.gain.setValueAtTime(0.6, now);
-    gain.gain.exponentialDecayTo(0.01, now + 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
 
     osc.connect(gain);
     gain.connect(this.masterGain);
@@ -198,7 +198,7 @@ export class SoundManager {
 
       const gain = this.audioContext.createGain();
       gain.gain.setValueAtTime(0.3, now + i * 0.08);
-      gain.gain.exponentialDecayTo(0.01, now + i * 0.08 + 0.3);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.08 + 0.3);
 
       osc.connect(gain);
       gain.connect(this.masterGain);
@@ -255,7 +255,7 @@ export class SoundManager {
 
       const gain = this.audioContext.createGain();
       gain.gain.setValueAtTime(0.25, now + i * 0.1);
-      gain.gain.exponentialDecayTo(0.01, now + i * 0.1 + 0.4);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.1 + 0.4);
 
       osc.connect(gain);
       gain.connect(this.masterGain);
@@ -311,7 +311,7 @@ export class SoundManager {
 
     const gain = this.audioContext.createGain();
     gain.gain.setValueAtTime(0.3, now);
-    gain.gain.exponentialDecayTo(0.01, now + 0.15);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
 
     osc.connect(gain);
     gain.connect(this.masterGain);
@@ -391,7 +391,7 @@ export class SoundManager {
 
       const gain = this.audioContext.createGain();
       gain.gain.setValueAtTime(0.2, now + note.time);
-      gain.gain.exponentialDecayTo(0.01, now + note.time + note.dur);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + note.time + note.dur);
 
       osc.connect(filter);
       filter.connect(gain);
@@ -418,7 +418,7 @@ export class SoundManager {
 
     const gain = this.audioContext.createGain();
     gain.gain.setValueAtTime(volume, now);
-    gain.gain.exponentialDecayTo(0.001, now + duration);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
     osc.connect(gain);
     gain.connect(this.masterGain);
@@ -442,13 +442,6 @@ export class SoundManager {
 
     return buffer;
   }
-}
-
-// GainNode에 exponentialDecayTo 헬퍼 추가
-if (typeof GainNode !== 'undefined') {
-  GainNode.prototype.gain.exponentialDecayTo = function(value, endTime) {
-    this.exponentialRampToValueAtTime(Math.max(0.001, value), endTime);
-  };
 }
 
 // 전역 싱글톤 인스턴스
