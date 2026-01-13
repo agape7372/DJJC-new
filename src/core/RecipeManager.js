@@ -299,7 +299,6 @@ class RecipeManager {
       marshmallow_perfect: 0,
       kadaif_perfect: 0,
       daily_sales: 0,      // 누적 판매량 (이름은 호환성 위해 유지)
-      total_sales: 0,      // 총 판매량 (새 키)
       best_total_score: 0,
       best_flavor: 0,
       best_texture: 0,

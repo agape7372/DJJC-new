@@ -158,6 +158,19 @@ export class SellState extends BaseState {
   }
 
   handleTap(pos) {
+    // DEV 모드 스킵 버튼 체크
+    if (this.config.devMode && pos) {
+      const skipBtn = { x: this.config.width - 80, y: 55, width: 70, height: 35 };
+      if (this.isPointInRect(pos, skipBtn)) {
+        soundManager.playUIClick();
+        this.game.playerData.day++;
+        this.game.saveGameData();
+        this.game.resetCookieStats();
+        this.game.stateManager.changeState(GameState.PREP);
+        return;
+      }
+    }
+
     if (this.showIntro) {
       this.showIntro = false;
       soundManager.playUIClick();
@@ -552,6 +565,11 @@ export class SellState extends BaseState {
       // UI
       this.renderUI(ctx);
 
+      // DEV 스킵 버튼
+      if (this.config.devMode) {
+        this.renderDevSkipButton(ctx);
+      }
+
       // 버튼
       this.renderButtons(ctx);
 
@@ -915,6 +933,20 @@ export class SellState extends BaseState {
     ctx.fillStyle = '#333';
     ctx.textAlign = 'center';
     ctx.fillText(text, x, y + 4);
+  }
+
+  renderDevSkipButton(ctx) {
+    const btn = { x: this.config.width - 80, y: 55, width: 70, height: 35 };
+
+    ctx.fillStyle = '#e74c3c';
+    ctx.beginPath();
+    ctx.roundRect(btn.x, btn.y, btn.width, btn.height, 5);
+    ctx.fill();
+
+    ctx.font = 'bold 11px DungGeunMo, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillText('SKIP →', btn.x + btn.width / 2, btn.y + 22);
   }
 
   renderUI(ctx) {

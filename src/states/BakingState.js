@@ -86,7 +86,7 @@ export class BakingState extends BaseState {
 
     this.game.inputManager.onDrag = (pos, dist, angle) => this.handleDrag(pos, dist, angle);
     this.game.inputManager.onSwipe = (dir) => this.handleSwipe(dir);
-    this.game.inputManager.onTap = () => this.handleTap();
+    this.game.inputManager.onTap = (pos) => this.handleTap(pos);
   }
 
   exit() {
@@ -202,7 +202,17 @@ export class BakingState extends BaseState {
     }
   }
 
-  handleTap() {
+  handleTap(pos) {
+    // DEV 모드 스킵 버튼 체크
+    if (this.config.devMode && pos) {
+      const skipBtn = { x: this.config.width - 80, y: 130, width: 70, height: 35 };
+      if (this.isPointInRect(pos, skipBtn)) {
+        soundManager.playUIClick();
+        this.game.stateManager.changeState(GameState.DECO);
+        return;
+      }
+    }
+
     if (this.showIntro) {
       this.showIntro = false;
       soundManager.playUIClick();
@@ -365,6 +375,11 @@ export class BakingState extends BaseState {
     // UI
     this.renderUI(ctx);
 
+    // DEV 스킵 버튼
+    if (this.config.devMode) {
+      this.renderDevSkipButton(ctx);
+    }
+
     // 반죽
     this.renderDough(ctx);
 
@@ -475,6 +490,20 @@ export class BakingState extends BaseState {
       ctx.fill();
     });
     ctx.globalAlpha = 1;
+  }
+
+  renderDevSkipButton(ctx) {
+    const btn = { x: this.config.width - 80, y: 130, width: 70, height: 35 };
+
+    ctx.fillStyle = '#e74c3c';
+    ctx.beginPath();
+    ctx.roundRect(btn.x, btn.y, btn.width, btn.height, 5);
+    ctx.fill();
+
+    ctx.font = 'bold 11px DungGeunMo, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillText('SKIP →', btn.x + btn.width / 2, btn.y + 22);
   }
 
   renderUI(ctx) {

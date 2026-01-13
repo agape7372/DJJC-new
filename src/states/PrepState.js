@@ -112,6 +112,16 @@ export class PrepState extends BaseState {
   }
 
   handleTap(pos) {
+    // DEV 모드 스킵 버튼 체크
+    if (this.config.devMode) {
+      const skipBtn = { x: this.config.width - 80, y: 120, width: 70, height: 35 };
+      if (this.isPointInRect(pos, skipBtn)) {
+        this.game.sound.playUIClick();
+        this.game.stateManager.changeState(GameState.BAKING);
+        return;
+      }
+    }
+
     if (this.showIntro) {
       this.startMiniGame();
       return;
@@ -272,40 +282,75 @@ export class PrepState extends BaseState {
     else if (this.phase === 2) this.updateMarshmallow(dt);
   }
 
-  // ========== 카다이프 썰기 ==========
+  // ========== 카다이프 썰기 (Fruit Ninja 스타일) ==========
+
+  // 카다이프 물리 상수 (Fruit Ninja 참고)
+  static KADAIF_PHYSICS = {
+    GRAVITY: 850,              // 중력 (더 강한 포물선)
+    MIN_VY: -950,              // 최소 상향 속도
+    MAX_VY: -750,              // 최대 상향 속도 (덜 세게)
+    MIN_VX: -180,              // 좌측 최대 수평 속도
+    MAX_VX: 180,               // 우측 최대 수평 속도
+    SPAWN_MARGIN: 0.15,        // 화면 가장자리 여백 (15%)
+    APEX_MIN: 0.25,            // 최소 정점 높이 (화면 상단 25%)
+    APEX_MAX: 0.45,            // 최대 정점 높이 (화면 상단 45%)
+  };
+
   updateKadaif(dt) {
-    // 새 카다이프 생성
-    if (Math.random() < dt * 2.5) {
+    // 새 카다이프 생성 (스폰 레이트 조정)
+    if (Math.random() < dt * 2.2) {
       this.spawnKadaif();
     }
 
-    // 카다이프 이동
+    const GRAVITY = PrepState.KADAIF_PHYSICS.GRAVITY;
+
+    // 카다이프 이동 (Fruit Ninja 스타일 물리)
     this.kadaifs.forEach(k => {
-      k.x += k.vx * dt; // 수평 이동 추가
+      // 위치 업데이트
+      k.x += k.vx * dt;
       k.y += k.vy * dt;
-      k.vy += 380 * dt; // 중력 (약간 증가)
-      k.rotation += k.rotSpeed * dt;
+
+      // 중력 적용 (강한 포물선 효과)
+      k.vy += GRAVITY * dt;
+
+      // 회전 (속도에 비례하여 더 역동적으로)
+      const speed = Math.sqrt(k.vx * k.vx + k.vy * k.vy);
+      k.rotation += k.rotSpeed * dt * (1 + speed / 500);
+
+      // 정점 감지 (슬로우 모션 효과용 - 선택적)
+      if (k.vy > -50 && k.vy < 50 && !k.reachedApex) {
+        k.reachedApex = true;
+      }
     });
 
     // 잘린 조각 업데이트
     this.slicedPieces = this.slicedPieces.filter(p => {
-      p.y += p.vy * dt;
       p.x += p.vx * dt;
-      p.vy += 400 * dt;
+      p.y += p.vy * dt;
+      p.vy += GRAVITY * 1.2 * dt; // 조각은 약간 더 빠르게 떨어짐
       p.rotation += p.rotSpeed * dt;
-      p.alpha -= dt * 0.8;
+      p.alpha -= dt * 1.2;
       return p.alpha > 0 && p.y < this.config.height + 100;
     });
 
-    // 화면 밖 카다이프 제거
-    this.kadaifs = this.kadaifs.filter(k => k.y < this.config.height + 50 && !k.sliced);
+    // 화면 밖 카다이프 제거 (좌우도 체크)
+    this.kadaifs = this.kadaifs.filter(k =>
+      !k.sliced &&
+      k.y < this.config.height + 80 &&
+      k.x > -100 &&
+      k.x < this.config.width + 100
+    );
 
     // 슬라이스 트레일 페이드
     const now = Date.now();
-    this.sliceTrail = this.sliceTrail.filter(p => now - p.time < 80);
+    this.sliceTrail = this.sliceTrail.filter(p => now - p.time < 100);
   }
 
   spawnKadaif() {
+    const P = PrepState.KADAIF_PHYSICS;
+    const W = this.config.width;
+    const H = this.config.height;
+
     // 스페셜 타입 확률
     const rand = Math.random();
     let type = 'normal';
@@ -313,49 +358,63 @@ export class PrepState extends BaseState {
     else if (rand < 0.12) type = 'golden';
     else if (rand < 0.20) type = 'premium';
 
-    // 개선된 스폰 로직: 더 넓은 스폰 영역, 더 강한 수평 속도
-    const spawnPattern = Math.random();
-    let x, targetX, vx, vy;
+    // ===== Fruit Ninja 스타일 스폰 =====
 
-    if (spawnPattern < 0.4) {
-      // 패턴 1: 화면 하단 좌우에서 대각선으로 올라옴
-      const fromLeft = Math.random() > 0.5;
-      x = fromLeft ? 30 : this.config.width - 30;
-      targetX = this.config.width / 2 + (Math.random() - 0.5) * 100;
-      vx = (targetX - x) * 0.025; // 더 강한 수평 속도
-      vy = -520 - Math.random() * 100;
-    } else if (spawnPattern < 0.7) {
-      // 패턴 2: 화면 중앙 하단에서 위로
-      x = this.config.width * 0.3 + Math.random() * this.config.width * 0.4;
-      targetX = x + (Math.random() - 0.5) * 60;
-      vx = (targetX - x) * 0.02;
-      vy = -580 - Math.random() * 80;
-    } else {
-      // 패턴 3: 화면 측면에서 포물선
-      const fromLeft = Math.random() > 0.5;
-      x = fromLeft ? -20 : this.config.width + 20;
-      targetX = fromLeft ?
-        this.config.width * 0.4 + Math.random() * this.config.width * 0.2 :
-        this.config.width * 0.2 + Math.random() * this.config.width * 0.2;
-      vx = (targetX - x) * 0.03; // 더 빠른 수평 이동
-      vy = -450 - Math.random() * 100;
-    }
+    // 1. 스폰 X 위치: 화면 하단 전체 영역에서 랜덤 (15%~85%)
+    const spawnX = W * P.SPAWN_MARGIN + Math.random() * W * (1 - 2 * P.SPAWN_MARGIN);
+
+    // 2. 스폰 위치가 중앙에서 얼마나 떨어졌는지 계산 (-1 ~ 1)
+    const centerOffset = (spawnX - W / 2) / (W / 2);
+
+    // 3. 수평 속도 계산:
+    //    - 왼쪽에서 스폰하면 오른쪽(양수)으로, 오른쪽에서 스폰하면 왼쪽(음수)으로
+    //    - 가장자리일수록 중앙을 향해 더 빠르게
+    //    - 약간의 랜덤성 추가
+    const baseVx = -centerOffset * P.MAX_VX * (0.6 + Math.random() * 0.4);
+    const randomVx = (Math.random() - 0.5) * 80; // 추가 랜덤
+    const vx = baseVx + randomVx;
+
+    // 4. 수직 속도 계산:
+    //    - 목표 정점 높이를 기반으로 계산
+    //    - 정점 높이 = H * (APEX_MIN ~ APEX_MAX)
+    const targetApexY = H * (P.APEX_MIN + Math.random() * (P.APEX_MAX - P.APEX_MIN));
+    const travelDistance = H - targetApexY; // 올라가야 할 거리
+
+    // 물리 공식: v² = 2 * g * h → v = -sqrt(2 * g * h)
+    const baseVy = -Math.sqrt(2 * P.GRAVITY * travelDistance);
+
+    // 약간의 랜덤성 추가 (±10%)
+    const vy = baseVy * (0.9 + Math.random() * 0.2);
+
+    // 5. 회전 속도: 수평 속도에 비례 (자연스러운 회전)
+    const rotSpeed = (Math.random() - 0.5) * 8 + (vx / P.MAX_VX) * 3;
+
+    // 6. 크기 랜덤
+    const size = 45 + Math.random() * 20;
 
     this.kadaifs.push({
-      x,
-      y: this.config.height + 20,
+      x: spawnX,
+      y: H + 30,
       vx,
       vy,
-      size: 50 + Math.random() * 15, // 약간 더 큰 크기
-      rotation: 0,
-      rotSpeed: (Math.random() - 0.5) * 6,
+      size,
+      rotation: Math.random() * Math.PI * 2,
+      rotSpeed,
       type,
-      sliced: false
+      sliced: false,
+      reachedApex: false
     });
 
     // 스페셜 등장 사운드
     if (type !== 'normal') {
       this.game.sound.playSpecial();
+    }
+  }
+
+  // 동시에 여러 개 스폰 (웨이브)
+  spawnKadaifWave(count = 3) {
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => this.spawnKadaif(), i * 100);
     }
   }
 
@@ -621,6 +680,11 @@ export class PrepState extends BaseState {
       // 상단 UI
       this.renderUI(ctx);
 
+      // DEV 스킵 버튼
+      if (this.config.devMode) {
+        this.renderDevSkipButton(ctx);
+      }
+
       // 미니게임별 렌더링
       if (this.phase === 0) this.renderKadaif(ctx);
       else if (this.phase === 1) this.renderPistachio(ctx);
@@ -732,6 +796,20 @@ export class PrepState extends BaseState {
         ctx.stroke();
       }
     }
+  }
+
+  renderDevSkipButton(ctx) {
+    const btn = { x: this.config.width - 80, y: 120, width: 70, height: 35 };
+
+    ctx.fillStyle = '#e74c3c';
+    ctx.beginPath();
+    ctx.roundRect(btn.x, btn.y, btn.width, btn.height, 5);
+    ctx.fill();
+
+    ctx.font = 'bold 11px DungGeunMo, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillText('SKIP →', btn.x + btn.width / 2, btn.y + 22);
   }
 
   renderUI(ctx) {

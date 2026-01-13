@@ -35,6 +35,13 @@ export class TutorialState extends BaseState {
   }
 
   enter() {
+    // autoSkip 모드면 바로 PREP으로
+    if (this.config.autoSkip) {
+      console.log('⏩ 튜토리얼 자동 스킵');
+      this.game.stateManager.changeState(GameState.PREP);
+      return;
+    }
+
     this.step = 0;
     this.game.inputManager.onTap = (pos) => this.handleTap(pos);
 

@@ -123,7 +123,7 @@ export class TastingState extends BaseState {
     // 반응 생성
     this.generateReactions();
 
-    this.game.inputManager.onTap = () => this.handleTap();
+    this.game.inputManager.onTap = (pos) => this.handleTap(pos);
   }
 
   exit() {
@@ -192,7 +192,17 @@ export class TastingState extends BaseState {
     this.currentFriendReaction = this.reactions.friend[Math.floor(Math.random() * this.reactions.friend.length)];
   }
 
-  handleTap() {
+  handleTap(pos) {
+    // DEV 모드 스킵 버튼 체크
+    if (this.config.devMode && pos) {
+      const skipBtn = { x: this.config.width - 80, y: 10, width: 70, height: 35 };
+      if (this.isPointInRect(pos, skipBtn)) {
+        soundManager.playUIClick();
+        this.game.stateManager.changeState(GameState.SELL);
+        return;
+      }
+    }
+
     if (this.phase === 0) {
       // 인트로 스킵
       this.phase = 1;
@@ -406,7 +416,26 @@ export class TastingState extends BaseState {
       ctx.fillRect(0, 0, this.config.width, this.config.height);
     }
 
+    // DEV 스킵 버튼
+    if (this.config.devMode) {
+      this.renderDevSkipButton(ctx);
+    }
+
     ctx.restore();
+  }
+
+  renderDevSkipButton(ctx) {
+    const btn = { x: this.config.width - 80, y: 10, width: 70, height: 35 };
+
+    ctx.fillStyle = '#e74c3c';
+    ctx.beginPath();
+    ctx.roundRect(btn.x, btn.y, btn.width, btn.height, 5);
+    ctx.fill();
+
+    ctx.font = 'bold 11px DungGeunMo, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillText('SKIP →', btn.x + btn.width / 2, btn.y + 22);
   }
 
   renderBackground(ctx) {

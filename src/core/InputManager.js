@@ -138,8 +138,8 @@ export class InputManager {
         if (this.onSwipe) {
           this.onSwipe(this.swipeDirection, distance);
         }
-      } else if (distance < 10 && duration < 200) {
-        // 탭
+      } else if (distance < 20 && duration < 400) {
+        // 탭 - 임계값 증가 (distance: 10->20, duration: 200ms->400ms)
         if (this.onTap) {
           this.onTap(coords);
         }
@@ -211,7 +211,8 @@ export class InputManager {
       const dy = this.touchEnd.y - this.touchStart.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      if (distance < 10) {
+      // 탭 감지 임계값 증가 (10 -> 20) - 작은 마우스 움직임 허용
+      if (distance < 20) {
         if (this.onTap) {
           this.onTap(coords);
         }
@@ -236,6 +237,6 @@ export class InputManager {
   }
 
   update() {
-    // 프레임별 입력 상태 업데이트
+    // Game.js에서 호출됨
   }
 }

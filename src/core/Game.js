@@ -18,13 +18,21 @@ export class Game {
     this.canvas = null;
     this.ctx = null;
 
+    // URL 파라미터 체크
+    const params = new URLSearchParams(window.location.search);
+    const devParam = params.get('dev');
+    const skipParam = params.get('skip');
+    const isDevMode = devParam === '1' || devParam === 'true' || devParam === '' || params.has('dev');
+    const isAutoSkip = skipParam === '1' || skipParam === 'true' || skipParam === '' || params.has('skip');
+
     // 게임 설정
     this.config = {
       width: 390,      // 모바일 기준 너비
       height: 844,     // 모바일 기준 높이
       targetFPS: 60,
-      debug: true,     // 개발자 모드
-      devMode: true    // 스토리/튜토리얼 스킵 가능
+      debug: isDevMode,     // 개발자 모드 (?dev)
+      devMode: isDevMode,   // 스토리/튜토리얼 스킵 버튼 표시 (?dev)
+      autoSkip: isAutoSkip  // 인트로+튜토리얼 자동 스킵 (?skip)
     };
 
     // 매니저들
@@ -61,6 +69,14 @@ export class Game {
       reputation: 0,
       regulars: []    // 단골 목록
     };
+
+    // 개발 모드 로그
+    if (this.config.devMode) {
+      console.log('🔧 개발 모드 활성화 (?dev)');
+    }
+    if (this.config.autoSkip) {
+      console.log('⏩ 자동 스킵 활성화 (?skip) - 인트로/튜토리얼 건너뜀');
+    }
   }
 
   /**

@@ -10,6 +10,7 @@ export class TitleState extends BaseState {
     super(game);
     this.startButton = null;
     this.recipeButton = null;
+    this.devModeButton = null;  // DEV 모드 토글 버튼
     this.devSkipButton = null;
     this.titleY = 0;
     this.titleBounce = 0;
@@ -37,7 +38,20 @@ export class TitleState extends BaseState {
       height: 50
     };
 
-    // 개발자 모드 스킵 버튼
+    // DEV 모드 토글 버튼 (항상 표시)
+    this.devModeButton = {
+      x: this.config.width - 70,
+      y: 10,
+      width: 60,
+      height: 30
+    };
+
+    // 개발자 모드 스킵 버튼 (devMode일 때만)
+    this.updateDevSkipButton();
+  }
+
+  updateDevSkipButton() {
+    const btnWidth = 200;
     if (this.config.devMode) {
       this.devSkipButton = {
         x: (this.config.width - btnWidth) / 2,
@@ -45,6 +59,8 @@ export class TitleState extends BaseState {
         width: btnWidth,
         height: 50
       };
+    } else {
+      this.devSkipButton = null;
     }
   }
 
@@ -53,6 +69,16 @@ export class TitleState extends BaseState {
   }
 
   handleTap(pos) {
+    // DEV 모드 토글 버튼
+    if (this.isPointInRect(pos, this.devModeButton)) {
+      this.game.sound.playUIClick();
+      this.config.devMode = !this.config.devMode;
+      this.config.autoSkip = this.config.devMode;
+      this.config.debug = this.config.devMode;
+      this.updateDevSkipButton();
+      return;
+    }
+
     if (this.isPointInRect(pos, this.startButton)) {
       this.game.sound.playUIClick();
       this.game.stateManager.changeState(GameState.INTRO);
@@ -142,6 +168,21 @@ export class TitleState extends BaseState {
       ctx.textAlign = 'center';
       ctx.fillText('[DEV] 스킵 → 재료준비', this.devSkipButton.x + this.devSkipButton.width / 2, this.devSkipButton.y + 32);
     }
+
+    // DEV 모드 토글 버튼 (우상단)
+    const devBtn = this.devModeButton;
+    ctx.fillStyle = this.config.devMode ? '#e74c3c' : '#555';
+    ctx.beginPath();
+    ctx.roundRect(devBtn.x, devBtn.y, devBtn.width, devBtn.height, 5);
+    ctx.fill();
+    ctx.strokeStyle = this.config.devMode ? '#c0392b' : '#777';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.font = 'bold 12px DungGeunMo, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillText('DEV', devBtn.x + devBtn.width / 2, devBtn.y + 20);
 
     // 버전 정보
     ctx.font = '12px DungGeunMo, sans-serif';

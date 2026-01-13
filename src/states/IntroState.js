@@ -69,10 +69,20 @@ export class IntroState extends BaseState {
     this.flyX = 0;
     this.flyY = 0;
     this.flyAngle = 0;
+
+    // 스킵 버튼
+    this.skipButton = null;
   }
 
   enter() {
-    this.game.inputManager.onTap = () => this.handleTap();
+    // autoSkip 모드면 바로 PREP으로
+    if (this.config.autoSkip) {
+      console.log('⏩ 인트로 자동 스킵');
+      this.game.stateManager.changeState(GameState.PREP);
+      return;
+    }
+
+    this.game.inputManager.onTap = (pos) => this.handleTap(pos);
     this.currentScene = 0;
     this.currentText = 0;
     this.displayedChars = 0;
@@ -81,13 +91,30 @@ export class IntroState extends BaseState {
     // 파리 초기 위치
     this.flyX = this.config.width * 0.3;
     this.flyY = this.config.height * 0.3;
+
+    // 스킵 버튼 (devMode일 때 표시)
+    if (this.config.devMode) {
+      this.skipButton = {
+        x: this.config.width - 100,
+        y: 20,
+        width: 80,
+        height: 35
+      };
+    }
   }
 
   exit() {
     this.game.inputManager.onTap = null;
   }
 
-  handleTap() {
+  handleTap(pos) {
+    // 스킵 버튼 체크 (devMode)
+    if (this.skipButton && this.isPointInRect(pos, this.skipButton)) {
+      this.game.sound.playUIClick();
+      this.game.stateManager.changeState(GameState.PREP);
+      return;
+    }
+
     const scene = this.scenes[this.currentScene];
     const currentFullText = scene.texts[this.currentText];
 
@@ -158,6 +185,20 @@ export class IntroState extends BaseState {
 
     // 텍스트 박스
     this.renderTextBox(ctx, scene);
+
+    // 스킵 버튼 (devMode)
+    if (this.skipButton) {
+      ctx.fillStyle = '#e74c3c';
+      ctx.fillRect(this.skipButton.x, this.skipButton.y, this.skipButton.width, this.skipButton.height);
+      ctx.strokeStyle = '#c0392b';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(this.skipButton.x, this.skipButton.y, this.skipButton.width, this.skipButton.height);
+
+      ctx.font = '14px DungGeunMo, sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.fillText('SKIP', this.skipButton.x + this.skipButton.width / 2, this.skipButton.y + 22);
+    }
 
     // 스킵 안내
     ctx.font = '14px DungGeunMo, sans-serif';
