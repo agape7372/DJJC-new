@@ -213,6 +213,167 @@
 
 ---
 
+## Phase 7.6: 미니게임 드래그 버그 수정 ✅
+**완료일: 2026-01-12**
+
+### 근본 원인
+- `InputManager.handleMouseMove`에서 `dragAngle` 계산 누락
+- 마우스 드래그 시 angle이 항상 0 → 마시멜로우/베이킹 작동 안 함
+
+### 수정된 버그
+- [x] **Phase 1**: InputManager - 마우스 핸들러에 각도 계산 추가
+  - `handleMouseMove`에 각도 계산 로직 추가
+  - 각도 래핑 처리 (±π 범위)
+
+- [x] **Phase 2**: PrepState 마시멜로우 - delta angle 계산 수정
+  - `lastDragAngle` 변수 추가
+  - 누적 angle 대신 delta angle 사용
+  - RPM 계산 정확도 개선
+
+- [x] **Phase 3**: BakingState - 검증 완료
+  - 이미 올바르게 구현됨
+
+- [x] **Phase 4**: 카다이프 가시성 개선
+  - 3가지 스폰 패턴 추가 (대각선/중앙/포물선)
+  - 수평 속도 증가 (vx * 0.025~0.03)
+  - 카다이프 크기 증가 (50+15px)
+  - 수평 이동(vx) 업데이트 로직 추가
+
+### 수정된 파일
+- `src/core/InputManager.js` - 마우스 각도 계산 추가
+- `src/states/PrepState.js` - 마시멜로우 delta angle, 카다이프 스폰 개선
+
+---
+
+## Phase 7.7: 카다이프 물리 개선 (Fruit Ninja 스타일) ✅
+**완료일: 2026-01-12**
+
+### 개선 사항
+- [x] **Fruit Ninja 물리 시스템 도입**
+  - 중력 강화: 380 → 850 (더 역동적인 포물선)
+  - 물리 공식 기반 수직 속도 계산: `v = sqrt(2 * g * h)`
+  - 목표 정점 높이 기반 발사 (화면 상단 25%~45%)
+
+- [x] **스폰 위치 다양화**
+  - 화면 하단 전체 영역에서 스폰 (15%~85%)
+  - 가장자리 스폰 시 중앙 방향으로 이동
+
+- [x] **수평 속도 개선**
+  - 스폰 위치 기반 자동 계산 (가장자리 → 중앙)
+  - 추가 랜덤성으로 다양한 궤적 생성
+  - 최대 수평 속도: ±180 px/s
+
+- [x] **회전 개선**
+  - 속도에 비례한 동적 회전
+  - 수평 속도에 따른 회전 방향 조정
+
+### 물리 상수 (KADAIF_PHYSICS)
+| 상수 | 값 | 설명 |
+|------|-----|------|
+| GRAVITY | 850 | 중력 가속도 |
+| MAX_VX | 180 | 최대 수평 속도 |
+| APEX_MIN | 0.25 | 최소 정점 높이 (상단 25%) |
+| APEX_MAX | 0.45 | 최대 정점 높이 (상단 45%) |
+| SPAWN_MARGIN | 0.15 | 스폰 영역 여백 (15%) |
+
+### 수정된 파일
+- `src/states/PrepState.js` - spawnKadaif, updateKadaif 완전 재설계
+
+---
+
+## Phase 7.8: 데코 시스템 입력 버그 수정 🔧
+**완료일: 2026-01-12**
+
+### 수정된 버그
+- [x] **탭 감지 임계값 완화**
+  - 거리 임계값: 10px → 20px
+  - 터치 지속시간: 200ms → 400ms
+
+- [x] **UX 개선**
+  - 코코아/금가루 도구 사용 시 "드래그로 뿌리세요!" 힌트 표시
+  - 디버그 모드에서 탭 위치 시각화 (노란 원)
+  - 상태 변수 실시간 표시
+
+### 수정된 파일
+- `src/core/InputManager.js` - 탭 감지 임계값 조정
+- `src/states/DecoState.js` - 힌트 시스템, 디버그 표시 추가
+
+---
+
+## Phase 7.9: 개발자 모드 강화 ✅
+**완료일: 2026-01-13**
+
+### 개선 사항
+- [x] **URL 파라미터 기반 모드 전환**
+  - `?dev` 또는 `?dev=1`: 개발자 모드 활성화 (스킵 버튼 표시)
+  - `?skip` 또는 `?skip=1`: 자동 스킵 모드 (인트로+튜토리얼 완전 건너뜀)
+  - 두 파라미터 조합 가능: `?dev&skip`
+
+- [x] **IntroState 스킵 기능 추가**
+  - devMode: 빨간색 SKIP 버튼 표시 (우측 상단)
+  - autoSkip: 인트로 진입 시 즉시 PREP으로 이동
+
+- [x] **TutorialState autoSkip 지원**
+  - autoSkip 모드면 튜토리얼도 자동 건너뜀
+
+- [x] **콘솔 로그 개선**
+  - 개발 모드 활성화 시 안내 메시지 출력
+  - 자동 스킵 활성화 시 안내 메시지 출력
+
+### 수정된 파일
+- `src/core/Game.js` - URL 파라미터 파싱, config 초기화
+- `src/states/IntroState.js` - SKIP 버튼, autoSkip 로직
+- `src/states/TutorialState.js` - autoSkip 로직
+
+### 사용법
+| URL | 설명 |
+|-----|------|
+| `http://localhost:3000` | 일반 모드 |
+| `http://localhost:3000?dev` | 개발 모드 (스킵 버튼 표시) |
+| `http://localhost:3000?skip` | 자동 스킵 (바로 게임 플레이) |
+| `http://localhost:3000?dev&skip` | 개발 모드 + 자동 스킵 |
+
+---
+
+## Phase 7.10: DEV 모드 UI 개선 및 코드 최적화 ✅
+**완료일: 2026-01-13**
+
+### 개선 사항
+- [x] **타이틀 화면 DEV 버튼 추가**
+  - URL 파라미터 없이 화면에서 직접 DEV 모드 토글 가능
+  - 우측 상단 DEV 버튼 클릭으로 ON/OFF
+  - 활성화 시 버튼이 빨간색으로 변경
+
+- [x] **모든 단계에 SKIP 버튼 추가**
+  - 재료준비 (PrepState): 우측 상단 SKIP → 베이킹으로
+  - 베이킹 (BakingState): 우측 상단 SKIP → 데코로
+  - 데코 (DecoState): 좌측 상단 SKIP → 품평회로
+  - 품평회 (TastingState): 우측 상단 SKIP → 판매로
+  - 판매 (SellState): 우측 상단 SKIP → 다음 날(재료준비)로
+
+- [x] **코드 최적화**
+  - InputManager.js: 디버그 console.log 8개 제거
+  - DecoState.js: 디버그 console.log 15개 제거
+  - RecipeManager.js: 미사용 `total_sales` 변수 제거
+
+### 수정된 파일
+- `src/core/Game.js` - URL 파라미터 파싱 유지
+- `src/core/InputManager.js` - 디버그 로그 제거
+- `src/core/RecipeManager.js` - 미사용 변수 제거
+- `src/states/TitleState.js` - DEV 토글 버튼 추가
+- `src/states/PrepState.js` - SKIP 버튼 추가
+- `src/states/BakingState.js` - SKIP 버튼 추가
+- `src/states/DecoState.js` - SKIP 버튼 추가, 디버그 로그 제거
+- `src/states/TastingState.js` - SKIP 버튼 추가
+- `src/states/SellState.js` - SKIP 버튼 추가
+
+### DEV 모드 게임 흐름
+```
+타이틀 [DEV 버튼] → 재료준비 [SKIP] → 베이킹 [SKIP] → 데코 [SKIP] → 품평회 [SKIP] → 판매 [SKIP] → 다음 날
+```
+
+---
+
 ## Phase 8: 추가 기능 (예정) 📋
 
 - [ ] 업그레이드 시스템 (장비, 재료)
@@ -253,5 +414,6 @@
 ## 메모
 
 - 개발 서버: `npm run dev` → http://localhost:3000
-- 개발자 모드: `?dev=1` URL 파라미터
+- 개발자 모드: `?dev` URL 파라미터 (스킵 버튼 표시)
+- 자동 스킵: `?skip` URL 파라미터 (인트로/튜토리얼 건너뜀)
 - 해상도: 390x844 (모바일 기준)
