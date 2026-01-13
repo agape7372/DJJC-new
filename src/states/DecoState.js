@@ -8,7 +8,7 @@
 import { BaseState } from './BaseState.js';
 import { GameState } from '../core/StateManager.js';
 import { soundManager } from '../core/SoundManager.js';
-import { particleSystem, COLORS } from '../core/ParticleSystem.js';
+import { particleSystem } from '../core/ParticleSystem.js';
 
 export class DecoState extends BaseState {
   constructor(game) {
@@ -90,10 +90,6 @@ export class DecoState extends BaseState {
     this.isCompleting = false;
     this.completeTimer = 0;
 
-    // 디버그용 마지막 탭 위치
-    this.lastTapPos = null;
-    this.lastTapTime = 0;
-
     this.doneButton = {
       x: this.config.width - 100,
       y: 20,
@@ -116,13 +112,9 @@ export class DecoState extends BaseState {
   }
 
   handleTap(pos) {
-    // 디버그용 마지막 탭 위치 기록
-    this.lastTapPos = { ...pos };
-    this.lastTapTime = Date.now();
-
     // DEV 모드 스킵 버튼 체크
-    if (this.config.devMode) {
-      const skipBtn = { x: 10, y: 20, width: 70, height: 35 };
+    if (this.config.devMode && pos) {
+      const skipBtn = { x: 10, y: 60, width: 70, height: 35 };
       if (this.isPointInRect(pos, skipBtn)) {
         soundManager.playUIClick();
         this.game.stateManager.changeState(GameState.TASTING);
@@ -167,27 +159,6 @@ export class DecoState extends BaseState {
 
       if (dist <= cookieRadius) {
         this.placeTopping(pos);
-      }
-    } else {
-      // 코코아/금가루는 드래그로 사용 - 쿠키 영역 탭 시 힌트 표시
-      const cookieCenter = { x: this.config.width / 2, y: this.config.height * 0.42 };
-      const cookieRadius = 120;
-      const dist = Math.sqrt(
-        Math.pow(pos.x - cookieCenter.x, 2) +
-        Math.pow(pos.y - cookieCenter.y, 2)
-      );
-
-      if (dist <= cookieRadius) {
-        // 힌트 팝업 표시
-        this.scorePopups.push({
-          x: pos.x,
-          y: pos.y - 20,
-          value: '드래그로 뿌리세요!',
-          life: 1.5,
-          vy: -30,
-          isHint: true
-        });
-        soundManager.playUIClick();
       }
     }
   }
@@ -256,15 +227,19 @@ export class DecoState extends BaseState {
 
     this.dragPos = pos;
 
-    // 쿠키 영역 체크
+    // 쿠키 영역 체크 (스프레이용 확장 영역 - 쿠키보다 넓게)
     const cookieCenter = { x: this.config.width / 2, y: this.config.height * 0.42 };
-    const cookieRadius = 120;
+    const sprayRadius = 180;  // 스프레이 영역 확대 (120 -> 180)
     const dist = Math.sqrt(
       Math.pow(pos.x - cookieCenter.x, 2) +
       Math.pow(pos.y - cookieCenter.y, 2)
     );
 
-    if (dist > cookieRadius) return;
+    // 팔레트 영역 제외 (하단 100px)
+    const paletteY = this.config.height - 100;
+    if (pos.y > paletteY) return;
+
+    if (dist > sprayRadius) return;
 
     if (this.selectedTool === 'cocoa') {
       // 코코아 파우더 스프레이
@@ -518,9 +493,6 @@ export class DecoState extends BaseState {
     if (this.isCompleting) {
       this.renderCompleteOverlay(ctx);
     }
-
-    // 디버그 정보
-    this.renderDebugInfo(ctx);
   }
 
   renderBackground(ctx) {
@@ -707,25 +679,11 @@ export class DecoState extends BaseState {
 
   renderScorePopups(ctx) {
     this.scorePopups.forEach(popup => {
-      ctx.globalAlpha = Math.min(1, popup.life);
+      ctx.globalAlpha = popup.life;
       ctx.font = 'bold 16px DungGeunMo, sans-serif';
+      ctx.fillStyle = '#2ecc71';
       ctx.textAlign = 'center';
-
-      if (popup.isHint) {
-        // 힌트 메시지 (노란색 배경)
-        const text = popup.value;
-        const textWidth = ctx.measureText(text).width;
-
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(popup.x - textWidth / 2 - 8, popup.y - 14, textWidth + 16, 24);
-
-        ctx.fillStyle = '#f1c40f';
-        ctx.fillText(text, popup.x, popup.y);
-      } else {
-        // 점수 팝업 (초록색)
-        ctx.fillStyle = '#2ecc71';
-        ctx.fillText(`+${popup.value}`, popup.x, popup.y);
-      }
+      ctx.fillText(`+${popup.value}`, popup.x, popup.y);
     });
     ctx.globalAlpha = 1;
   }
@@ -755,13 +713,6 @@ export class DecoState extends BaseState {
       ctx.fillStyle = '#888';
       ctx.fillText(`${tool.icon} ${tool.name} - ${tool.desc}`, this.config.width / 2, 70);
     }
-
-    // 데코 점수 미리보기
-    const previewScore = Math.min(100, Math.floor(this.cocoaDots.length / 8 + this.toppings.length * 8));
-    ctx.font = '14px DungGeunMo, sans-serif';
-    ctx.fillStyle = '#aaa';
-    ctx.textAlign = 'right';
-    ctx.fillText(`비주얼 예상: ${previewScore}점`, this.config.width - 20, 75);
   }
 
   renderPalette(ctx) {
@@ -818,7 +769,7 @@ export class DecoState extends BaseState {
   }
 
   renderDevSkipButton(ctx) {
-    const btn = { x: 10, y: 20, width: 70, height: 35 };
+    const btn = { x: 10, y: 60, width: 70, height: 35 };
 
     ctx.fillStyle = '#e74c3c';
     ctx.beginPath();
@@ -917,54 +868,5 @@ export class DecoState extends BaseState {
       ctx.fillText('완성!', this.config.width / 2, this.config.height * 0.5);
       ctx.shadowBlur = 0;
     }
-  }
-
-  // 디버그 정보 표시 (개발 모드에서만)
-  renderDebugInfo(ctx) {
-    if (!this.game.config.debug) return;
-
-    ctx.save();
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(5, 100, 200, 150);
-
-    ctx.font = '11px monospace';
-    ctx.fillStyle = '#0f0';
-    ctx.textAlign = 'left';
-
-    const lastTapStr = this.lastTapPos
-      ? `(${Math.round(this.lastTapPos.x)}, ${Math.round(this.lastTapPos.y)})`
-      : 'none';
-
-    const debugLines = [
-      `showIntro: ${this.showIntro}`,
-      `isCompleting: ${this.isCompleting}`,
-      `selectedTool: ${this.selectedTool}`,
-      `cocoaDots: ${this.cocoaDots.length}`,
-      `toppings: ${this.toppings.length}`,
-      `goldParticles: ${this.goldParticles.length}`,
-      `onTap set: ${!!this.game.inputManager.onTap}`,
-      `onDrag set: ${!!this.game.inputManager.onDrag}`,
-      `lastTap: ${lastTapStr}`
-    ];
-
-    debugLines.forEach((line, i) => {
-      ctx.fillText(line, 10, 115 + i * 14);
-    });
-
-    // 마지막 탭 위치 시각화 (3초간 표시)
-    if (this.lastTapPos && Date.now() - this.lastTapTime < 3000) {
-      ctx.strokeStyle = '#ff0';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(this.lastTapPos.x, this.lastTapPos.y, 20, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.fillStyle = '#ff0';
-      ctx.beginPath();
-      ctx.arc(this.lastTapPos.x, this.lastTapPos.y, 5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    ctx.restore();
   }
 }
