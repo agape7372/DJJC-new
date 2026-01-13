@@ -83,6 +83,11 @@ export class InputManager {
     this.touches = [coords];
     this.dragDistance = 0;
     this.dragAngle = 0;
+
+    // 터치 시작 시 즉시 드래그 콜백 호출 (첫 터치 위치에서 동작 시작)
+    if (this.onDrag) {
+      this.onDrag(coords, 0, 0);
+    }
   }
 
   handleTouchMove(e) {
@@ -179,6 +184,11 @@ export class InputManager {
     this.touches = [coords];
     this.dragDistance = 0;
     this.dragAngle = 0;
+
+    // 클릭 시작 시 즉시 드래그 콜백 호출
+    if (this.onDrag) {
+      this.onDrag(coords, 0, 0);
+    }
   }
 
   handleMouseMove(e) {
