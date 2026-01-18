@@ -75,10 +75,10 @@ export class IntroState extends BaseState {
   }
 
   enter() {
-    // autoSkip 모드면 바로 PREP으로
+    // autoSkip 모드면 바로 SHOP으로
     if (this.config.autoSkip) {
       console.log('⏩ 인트로 자동 스킵');
-      this.game.stateManager.changeState(GameState.PREP);
+      this.game.stateManager.changeState(GameState.SHOP);
       return;
     }
 
@@ -111,7 +111,7 @@ export class IntroState extends BaseState {
     // 스킵 버튼 체크 (devMode)
     if (this.skipButton && this.isPointInRect(pos, this.skipButton)) {
       this.game.sound.playUIClick();
-      this.game.stateManager.changeState(GameState.PREP);
+      this.game.stateManager.changeState(GameState.SHOP);
       return;
     }
 
@@ -132,8 +132,8 @@ export class IntroState extends BaseState {
         this.currentText = 0;
 
         if (this.currentScene >= this.scenes.length) {
-          // 인트로 종료 -> 튜토리얼로
-          this.game.stateManager.changeState(GameState.TUTORIAL);
+          // 인트로 종료 -> 가게 허브로
+          this.game.stateManager.changeState(GameState.SHOP);
           return;
         }
       }

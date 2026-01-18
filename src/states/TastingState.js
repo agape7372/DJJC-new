@@ -10,6 +10,8 @@ import { GameState } from '../core/StateManager.js';
 import { soundManager } from '../core/SoundManager.js';
 import { particleSystem, COLORS } from '../core/ParticleSystem.js';
 import { recipeManager } from '../core/RecipeManager.js';
+import { inventoryManager, Cookie } from '../core/InventoryManager.js';
+import { timeManager } from '../core/TimeManager.js';
 
 export class TastingState extends BaseState {
   constructor(game) {
@@ -198,7 +200,7 @@ export class TastingState extends BaseState {
       const skipBtn = { x: this.config.width - 80, y: 10, width: 70, height: 35 };
       if (this.isPointInRect(pos, skipBtn)) {
         soundManager.playUIClick();
-        this.game.stateManager.changeState(GameState.SELL);
+        this.game.stateManager.changeState(GameState.SHOP);
         return;
       }
     }
@@ -261,14 +263,28 @@ export class TastingState extends BaseState {
 
     } else if (this.phase > 4) {
       soundManager.playUIClick();
+
+      // 완성된 쿠키를 재고에 추가
+      const recipeName = this.currentRecipe ? this.currentRecipe.name : '클래식 두쫀쿠';
+      const cookie = new Cookie(this.scoreBreakdown, this.finalScore, recipeName);
+      const added = inventoryManager.addCookie(cookie);
+
+      if (added) {
+        // 시간 시스템에 쿠키 제작 기록
+        timeManager.recordCookieMade();
+      } else {
+        console.warn('재고가 가득 차서 쿠키를 추가할 수 없습니다!');
+      }
+
       // 새로 해금된 레시피가 있으면 레시피북으로 이동
       if (this.newUnlocks.length > 0) {
         this.game.stateManager.changeState(GameState.RECIPE_BOOK, {
           newUnlocks: this.newUnlocks,
-          returnTo: GameState.SELL
+          returnTo: GameState.SHOP
         });
       } else {
-        this.game.stateManager.changeState(GameState.SELL);
+        // 가게 허브로 돌아가기
+        this.game.stateManager.changeState(GameState.SHOP);
       }
     }
   }
@@ -923,7 +939,7 @@ export class TastingState extends BaseState {
       ctx.font = '16px DungGeunMo, sans-serif';
       ctx.fillStyle = `rgba(255, 255, 255, ${blinkAlpha})`;
       ctx.textAlign = 'center';
-      ctx.fillText('터치하여 판매 시작 →', centerX, this.config.height - 40);
+      ctx.fillText('터치하여 가게로 돌아가기 →', centerX, this.config.height - 40);
     }
   }
 }

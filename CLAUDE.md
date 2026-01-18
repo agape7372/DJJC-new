@@ -41,12 +41,15 @@ src/
 │   ├── AudioManager.js  # BGM/SFX 관리
 │   ├── SoundManager.js  # Web Audio API 프로시저럴 사운드
 │   ├── ParticleSystem.js # 파티클 이펙트 시스템
-│   └── RecipeManager.js # 레시피 관리 시스템
+│   ├── RecipeManager.js # 레시피 관리 시스템
+│   ├── InventoryManager.js # 쿠키 재고 관리
+│   └── ShopUpgradeManager.js # 가게 업그레이드 시스템
 ├── states/              # 게임 상태들
 │   ├── BaseState.js     # 상태 기본 클래스
 │   ├── TitleState.js    # 타이틀 화면
 │   ├── IntroState.js    # 인트로 컷신
 │   ├── TutorialState.js # 튜토리얼
+│   ├── ShopState.js     # 가게 허브 (메인 화면)
 │   ├── PrepState.js     # 재료준비 (미니게임 3종)
 │   ├── BakingState.js   # 베이킹 (반죽 성형)
 │   ├── DecoState.js     # 데코레이션
@@ -62,7 +65,20 @@ src/
 ## Core Game Flow
 
 ```
-[TITLE] → [INTRO] → [TUTORIAL] → [PREP] → [BAKING] → [DECO] → [TASTING] → [SELL] → [PREP]...
+[TITLE] → [INTRO] → [SHOP] (허브)
+                       ↓
+         ┌────────────────────────────┐
+         │ 🏠 가게 허브 (ShopState)    │
+         ├────────────────────────────┤
+         │ 🧑‍🍳 쿠키 만들기 → [PREP]    │
+         │ 📖 레시피북 → [RECIPE_BOOK] │
+         │ 💸 판매하기 → [SELL]        │
+         │ 📦 재고 확인                │
+         │ ⬆️ 업그레이드               │
+         └────────────────────────────┘
+
+쿠키 제작 플로우:
+[PREP] → [BAKING] → [DECO] → [TASTING] → [SHOP] (쿠키가 재고에 추가됨)
 ```
 
 ## Key Systems
@@ -74,7 +90,10 @@ src/
 ### 2. 미니게임 (PrepState)
 - 카다이프 썰기: Fruit Ninja 스타일 스와이프
 - 피스타치오 분쇄: 타이밍 터치 + 피버 모드
-- 마시멜로우 반죽: 원형 드래그로 RPM 조절
+- 마시멜로우 녹이기: 타이쿤 스타일 자원 관리
+  - 불 조절 (약불/중불/강불) - 리스크 vs 리워드
+  - 들러붙음 방지 - 젓기 + 연타로 해소
+  - 코코아 투입 타이밍 - 40%~70%에 투입시 보너스
 
 ### 3. 판매 시스템 (SellState)
 - 실시간 가격 차트 (Random Walk + 뉴스 이벤트)

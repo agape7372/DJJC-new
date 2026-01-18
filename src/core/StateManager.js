@@ -11,12 +11,14 @@ import { DecoState } from '../states/DecoState.js';
 import { TastingState } from '../states/TastingState.js';
 import { SellState } from '../states/SellState.js';
 import { RecipeBookState } from '../states/RecipeBookState.js';
+import { ShopState } from '../states/ShopState.js';
 
 // 게임 상태 열거형
 export const GameState = {
   TITLE: 'title',
   INTRO: 'intro',
   TUTORIAL: 'tutorial',
+  SHOP: 'shop',           // 가게 허브
   PREP: 'prep',           // 재료준비
   BAKING: 'baking',       // 베이킹
   DECO: 'deco',           // 데코레이션
@@ -44,6 +46,7 @@ export class StateManager {
     this.states[GameState.TITLE] = TitleState;
     this.states[GameState.INTRO] = IntroState;
     this.states[GameState.TUTORIAL] = TutorialState;
+    this.states[GameState.SHOP] = ShopState;
     this.states[GameState.PREP] = PrepState;
     this.states[GameState.BAKING] = BakingState;
     this.states[GameState.DECO] = DecoState;

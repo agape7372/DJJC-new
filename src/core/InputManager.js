@@ -34,6 +34,20 @@ export class InputManager {
     this.onDrag = null;
     this.onDragEnd = null;
 
+    // [Mobile Opt] 캐시된 캔버스 rect 및 스케일
+    this._cachedRect = null;
+    this._cachedScaleX = 1;
+    this._cachedScaleY = 1;
+    this._rectCacheDirty = true;
+
+    // [Mobile Opt] 재사용 가능한 좌표 객체
+    this._tempCoords = { x: 0, y: 0 };
+    this._touchStartCoords = { x: 0, y: 0, time: 0 };
+    this._touchEndCoords = { x: 0, y: 0, time: 0 };
+
+    // [Mobile Opt] 바운드 함수 캐싱
+    this._boundUpdateRect = this._updateCachedRect.bind(this);
+
     this.setupEventListeners();
   }
 
@@ -49,20 +63,39 @@ export class InputManager {
     this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
     this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
     this.canvas.addEventListener('mouseleave', (e) => this.handleMouseUp(e));
+
+    // [Mobile Opt] 리사이즈 시 rect 캐시 갱신
+    window.addEventListener('resize', this._boundUpdateRect);
+    window.addEventListener('orientationchange', this._boundUpdateRect);
+
+    // 초기 rect 캐싱
+    this._updateCachedRect();
+  }
+
+  /**
+   * [Mobile Opt] 캐시된 rect 갱신
+   */
+  _updateCachedRect() {
+    this._cachedRect = this.canvas.getBoundingClientRect();
+    this._cachedScaleX = this.canvas.width / this._cachedRect.width;
+    this._cachedScaleY = this.canvas.height / this._cachedRect.height;
+    this._rectCacheDirty = false;
   }
 
   /**
    * 캔버스 좌표로 변환
+   * [Mobile Opt] 캐시된 rect 사용 및 객체 재사용
    */
-  getCanvasCoords(clientX, clientY) {
-    const rect = this.canvas.getBoundingClientRect();
-    const scaleX = this.canvas.width / rect.width;
-    const scaleY = this.canvas.height / rect.height;
+  getCanvasCoords(clientX, clientY, reuseObject = null) {
+    // 캐시가 없거나 더티 상태면 갱신
+    if (!this._cachedRect || this._rectCacheDirty) {
+      this._updateCachedRect();
+    }
 
-    return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top) * scaleY
-    };
+    const target = reuseObject || this._tempCoords;
+    target.x = (clientX - this._cachedRect.left) * this._cachedScaleX;
+    target.y = (clientY - this._cachedRect.top) * this._cachedScaleY;
+    return target;
   }
 
   handleTouchStart(e) {
@@ -75,12 +108,20 @@ export class InputManager {
     }
 
     const touch = e.touches[0];
+    // [Mobile Opt] 재사용 객체 패턴
     const coords = this.getCanvasCoords(touch.clientX, touch.clientY);
 
     this.isTouching = true;
     this.isDragging = true;
-    this.touchStart = { ...coords, time: Date.now() };
-    this.touches = [coords];
+    // [Mobile Opt] 객체 재사용
+    this._touchStartCoords.x = coords.x;
+    this._touchStartCoords.y = coords.y;
+    this._touchStartCoords.time = Date.now();
+    this.touchStart = this._touchStartCoords;
+
+    // [Mobile Opt] touches 배열 재사용
+    this.touches.length = 0;
+    this.touches.push({ x: coords.x, y: coords.y });
     this.dragDistance = 0;
     this.dragAngle = 0;
 
@@ -117,11 +158,12 @@ export class InputManager {
       this.dragAngle += deltaAngle;
     }
 
-    // touches 배열 크기 제한 (메모리 관리)
-    if (this.touches.length > 100) {
-      this.touches = this.touches.slice(-50);
+    // [Mobile Opt] touches 배열 크기 제한 - splice 대신 인플레이스 시프트
+    if (this.touches.length >= 100) {
+      // 앞쪽 50개 제거 (새 배열 생성 없이)
+      this.touches.splice(0, 50);
     }
-    this.touches.push(coords);
+    this.touches.push({ x: coords.x, y: coords.y });
 
     // 드래그 콜백 호출
     if (this.onDrag) {
@@ -134,7 +176,11 @@ export class InputManager {
     if (!this.isTouching) return;
 
     const coords = this.touches[this.touches.length - 1] || this.touchStart;
-    this.touchEnd = { ...coords, time: Date.now() };
+    // [Mobile Opt] 객체 재사용
+    this._touchEndCoords.x = coords.x;
+    this._touchEndCoords.y = coords.y;
+    this._touchEndCoords.time = Date.now();
+    this.touchEnd = this._touchEndCoords;
 
     // 스와이프/탭 감지
     if (this.touchStart && this.touchEnd) {
@@ -180,8 +226,15 @@ export class InputManager {
     const coords = this.getCanvasCoords(e.clientX, e.clientY);
     this.isTouching = true;
     this.isDragging = true;
-    this.touchStart = { ...coords, time: Date.now() };
-    this.touches = [coords];
+    // [Mobile Opt] 객체 재사용
+    this._touchStartCoords.x = coords.x;
+    this._touchStartCoords.y = coords.y;
+    this._touchStartCoords.time = Date.now();
+    this.touchStart = this._touchStartCoords;
+
+    // [Mobile Opt] touches 배열 재사용
+    this.touches.length = 0;
+    this.touches.push({ x: coords.x, y: coords.y });
     this.dragDistance = 0;
     this.dragAngle = 0;
 
@@ -214,11 +267,11 @@ export class InputManager {
       this.dragAngle += deltaAngle;
     }
 
-    // touches 배열 크기 제한
-    if (this.touches.length > 100) {
-      this.touches = this.touches.slice(-50);
+    // [Mobile Opt] touches 배열 크기 제한
+    if (this.touches.length >= 100) {
+      this.touches.splice(0, 50);
     }
-    this.touches.push(coords);
+    this.touches.push({ x: coords.x, y: coords.y });
 
     if (this.onDrag) {
       this.onDrag(coords, this.dragDistance, this.dragAngle);
@@ -229,7 +282,11 @@ export class InputManager {
     if (!this.isTouching) return;
 
     const coords = this.touches[this.touches.length - 1] || this.touchStart;
-    this.touchEnd = { ...coords, time: Date.now() };
+    // [Mobile Opt] 객체 재사용
+    this._touchEndCoords.x = coords.x;
+    this._touchEndCoords.y = coords.y;
+    this._touchEndCoords.time = Date.now();
+    this.touchEnd = this._touchEndCoords;
 
     if (this.touchStart && this.touchEnd) {
       const dx = this.touchEnd.x - this.touchStart.x;
@@ -260,7 +317,15 @@ export class InputManager {
     this.swipeDirection = null;
     this.dragDistance = 0;
     this.dragAngle = 0;
-    this.touches = [];
+    // [Mobile Opt] 배열 재사용 (새 배열 생성 방지)
+    this.touches.length = 0;
+  }
+
+  /**
+   * [Mobile Opt] rect 캐시 무효화 (외부에서 캔버스 크기 변경 시 호출)
+   */
+  invalidateRectCache() {
+    this._rectCacheDirty = true;
   }
 
   update() {

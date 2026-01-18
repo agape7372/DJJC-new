@@ -10,6 +10,8 @@ import { GameState } from '../core/StateManager.js';
 import { soundManager } from '../core/SoundManager.js';
 import { particleSystem, COLORS } from '../core/ParticleSystem.js';
 import { recipeManager } from '../core/RecipeManager.js';
+import { inventoryManager } from '../core/InventoryManager.js';
+import { timeManager, TimePeriod, TimePeriodInfo } from '../core/TimeManager.js';
 
 export class SellState extends BaseState {
   constructor(game) {
@@ -23,8 +25,10 @@ export class SellState extends BaseState {
     this.maxHistory = 100;
     this.trend = 0; // -1 ~ 1
 
-    // 쿠키 재고
-    this.cookieCount = 3;
+    // 쿠키 재고 (인벤토리에서 로드)
+    this.sellCookies = [];       // 판매할 쿠키 목록
+    this.cookieCount = 0;        // 현재 판매 가능 개수
+    this.maxDisplayCookies = 3;  // 화면에 표시할 최대 개수
     this.freshness = 100;
 
     // 뉴스 시스템
@@ -115,9 +119,18 @@ export class SellState extends BaseState {
     this.currentPrice = this.basePrice;
     this.prevPrice = this.basePrice;
     this.priceHistory = [this.basePrice];
-    this.freshness = 100;
-    this.cookieCount = 3;
     this.earnings = 0;
+
+    // 인벤토리에서 쿠키 로드 (최대 maxDisplayCookies개)
+    this.sellCookies = inventoryManager.cookies.slice(0, this.maxDisplayCookies);
+    this.cookieCount = this.sellCookies.length;
+
+    // 평균 신선도 계산
+    if (this.sellCookies.length > 0) {
+      this.freshness = this.sellCookies.reduce((sum, c) => sum + c.freshness, 0) / this.sellCookies.length;
+    } else {
+      this.freshness = 100;
+    }
     this.displayedEarnings = 0;
     this.dayComplete = false;
     this.currentCustomer = null;
@@ -166,7 +179,7 @@ export class SellState extends BaseState {
         this.game.playerData.day++;
         this.game.saveGameData();
         this.game.resetCookieStats();
-        this.game.stateManager.changeState(GameState.PREP);
+        this.game.stateManager.changeState(GameState.SHOP);
         return;
       }
     }
@@ -178,13 +191,13 @@ export class SellState extends BaseState {
     }
 
     if (this.dayComplete) {
-      // 다음 날로
+      // 가게 허브로 돌아가기 (판매 세션 종료)
       soundManager.playUIClick();
       this.game.playerData.money += this.earnings;
-      this.game.playerData.day++;
       this.game.saveGameData();
       this.game.resetCookieStats();
-      this.game.stateManager.changeState(GameState.PREP);
+      // 날짜 증가는 ShopState의 TimeManager가 처리
+      this.game.stateManager.changeState(GameState.SHOP);
       return;
     }
 
@@ -207,24 +220,45 @@ export class SellState extends BaseState {
   }
 
   sellCookie() {
-    if (this.cookieCount <= 0) return;
+    if (this.cookieCount <= 0 || this.sellCookies.length === 0) return;
 
     const customer = this.currentCustomer;
-    const recipePriceMultiplier = recipeManager.getPriceMultiplier();
-    const price = Math.floor(this.currentPrice * customer.type.payMultiplier * recipePriceMultiplier);
+
+    // 가장 앞의 쿠키 판매
+    const cookieToSell = this.sellCookies[0];
+
+    // 요일 효과 가져오기
+    const combinedEffects = timeManager.getCombinedEffects();
+    const revenueBonus = combinedEffects.revenueBonus || 0;
+
+    // 쿠키 가격 계산 (쿠키 자체 가격 + 손님 배율 + 시장 가격 영향 + 요일 보너스)
+    const cookieBasePrice = cookieToSell.getCurrentPrice();
+    const marketInfluence = this.currentPrice / this.basePrice;
+    const dayBonus = 1 + revenueBonus;
+    const price = Math.floor(cookieBasePrice * customer.type.payMultiplier * marketInfluence * dayBonus);
+
+    // 실제로 인벤토리에서 쿠키 제거
+    inventoryManager.sellCookie(cookieToSell.id);
+    this.sellCookies.shift();
+
+    // 시간 시스템에 판매 기록
+    timeManager.recordCookieSold();
+    timeManager.recordRevenue(price);
 
     // 코인 사운드 & 파티클
     soundManager.playCoin();
     this.emitCoinParticles(this.config.width / 2, this.config.height * 0.35);
 
-    // 수익 팝업
+    // 수익 팝업 (요일 보너스 표시)
+    const bonusText = revenueBonus > 0 ? ` (+${Math.round(revenueBonus * 100)}%)` : '';
     this.showEarningsPopup(price, this.config.width / 2, this.config.height * 0.3);
 
     this.earnings += price;
 
-    // 바이럴 보너스
+    // 바이럴 보너스 (요일 효과 반영)
+    const viralChance = combinedEffects.viralChance || 1;
     if (customer.type.viralBonus) {
-      this.trend += 0.1;
+      this.trend += 0.1 * viralChance;
     }
 
     // 쿠키 흔들림
@@ -241,10 +275,15 @@ export class SellState extends BaseState {
   }
 
   giveService() {
-    if (this.cookieCount <= 0) return;
+    if (this.cookieCount <= 0 || this.sellCookies.length === 0) return;
 
     const customer = this.currentCustomer;
     customer.affection = (customer.affection || 0) + 50;
+
+    // 서비스로 제공하는 쿠키도 인벤토리에서 제거
+    const cookieToGive = this.sellCookies[0];
+    inventoryManager.removeCookie(cookieToGive.id);
+    this.sellCookies.shift();
 
     // 서비스 사운드
     soundManager.playSuccess();
@@ -323,7 +362,8 @@ export class SellState extends BaseState {
       this.resultRevealProgress = 0;
 
       // 일일 판매량 기록 (레시피 해금 조건용)
-      const soldCount = 3 - this.cookieCount;
+      const initialCount = Math.min(this.maxDisplayCookies, inventoryManager.totalCookiesMade);
+      const soldCount = initialCount - this.sellCookies.length;
       recipeManager.updateSalesStats(soldCount);
 
       // 결과 효과
@@ -385,27 +425,58 @@ export class SellState extends BaseState {
   }
 
   spawnCustomer() {
-    // 희귀 손님 확률 (레시피 보너스 적용)
+    // 시간대별 손님 가중치 가져오기
+    const customerWeights = timeManager.getCustomerWeights();
+    const combinedEffects = timeManager.getCombinedEffects();
+
+    // 레시피 보너스와 요일 효과 결합
     const customerAttraction = recipeManager.getCustomerAttraction();
+    const customerMultiplier = combinedEffects.customerMultiplier || 1;
+
+    // 희귀 손님 확률 (레시피 보너스 + 요일 효과)
     let availableTypes = this.customerTypes.filter(t => !t.rare);
-    const rareChance = 0.1 * customerAttraction; // 레시피 보너스로 희귀 손님 확률 증가
+    const rareChance = 0.1 * customerAttraction * (customerWeights.tourist / 1.0);
     const isRare = Math.random() < rareChance;
+
     if (isRare) {
       availableTypes = this.customerTypes.filter(t => t.rare);
     }
 
-    const type = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+    // 시간대별 가중치 적용하여 손님 타입 선택
+    const weightedTypes = availableTypes.map(t => {
+      let weight = 1;
+      if (t.id === 'student') weight = customerWeights.student || 1;
+      else if (t.id === 'hipster') weight = customerWeights.hipster || 1;
+      else if (t.id === 'dubai') weight = customerWeights.tourist || 1;
+      else if (t.id === 'grandma') weight = customerWeights.grandmother || 1;
+      return { type: t, weight };
+    });
+
+    // 가중치 기반 랜덤 선택
+    const totalWeight = weightedTypes.reduce((sum, w) => sum + w.weight, 0);
+    let random = Math.random() * totalWeight;
+    let selectedType = weightedTypes[0].type;
+
+    for (const wt of weightedTypes) {
+      random -= wt.weight;
+      if (random <= 0) {
+        selectedType = wt.type;
+        break;
+      }
+    }
+
     this.currentCustomer = {
-      type,
-      dialogue: type.dialogues[Math.floor(Math.random() * type.dialogues.length)],
-      affection: 0
+      type: selectedType,
+      dialogue: selectedType.dialogues[Math.floor(Math.random() * selectedType.dialogues.length)],
+      affection: 0,
+      timeBonus: customerMultiplier  // 요일 보너스 저장
     };
 
     this.customerScale = 0;
     this.customerBounce = 0;
 
     // 희귀 손님 효과
-    if (type.rare) {
+    if (selectedType.rare) {
       soundManager.playSpecial();
       this.flashAlpha = 0.5;
       particleSystem.emitSparkle(this.config.width / 2, this.config.height * 0.35, 20);
@@ -522,8 +593,12 @@ export class SellState extends BaseState {
   }
 
   updatePrice(dt) {
-    const randomChange = (Math.random() - 0.5) * 200;
-    const trendChange = this.trend * 100;
+    // 요일 효과: 가격 변동성
+    const combinedEffects = timeManager.getCombinedEffects();
+    const volatility = combinedEffects.priceVolatility || 1;
+
+    const randomChange = (Math.random() - 0.5) * 200 * volatility;
+    const trendChange = this.trend * 100 * volatility;
 
     this.currentPrice = Math.max(1000, Math.min(20000,
       this.currentPrice + (randomChange + trendChange) * dt
@@ -799,12 +874,14 @@ export class SellState extends BaseState {
     ctx.roundRect(30, counterY + 10, this.config.width - 60, 50, 5);
     ctx.fill();
 
-    // 쿠키 재고
-    for (let i = 0; i < 3; i++) {
+    // 쿠키 재고 (sellCookies 배열 기준으로 렌더링)
+    for (let i = 0; i < this.maxDisplayCookies; i++) {
       const x = 70 + i * 80;
       const y = counterY + 35;
 
-      if (i < this.cookieCount) {
+      if (i < this.sellCookies.length) {
+        const cookie = this.sellCookies[i];
+
         ctx.save();
         const shake = this.cookieShake[i];
         if (shake > 0) {
@@ -822,6 +899,19 @@ export class SellState extends BaseState {
         ctx.font = '40px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('🍪', x, y + 10);
+
+        // 등급 배지
+        ctx.fillStyle = cookie.grade.color;
+        ctx.beginPath();
+        ctx.arc(x + 20, y - 10, 12, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.font = 'bold 10px DungGeunMo, sans-serif';
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(cookie.grade.name, x + 20, y - 10);
+
         ctx.restore();
       } else {
         // 빈 자리
@@ -839,7 +929,8 @@ export class SellState extends BaseState {
     ctx.font = '12px DungGeunMo, sans-serif';
     ctx.fillStyle = '#aaa';
     ctx.textAlign = 'center';
-    ctx.fillText(`재고: ${this.cookieCount}/3`, this.config.width / 2, counterY + counterHeight - 10);
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(`재고: ${this.sellCookies.length}/${this.maxDisplayCookies}`, this.config.width / 2, counterY + counterHeight - 10);
   }
 
   renderCustomer(ctx) {
@@ -1148,14 +1239,15 @@ export class SellState extends BaseState {
       ctx.shadowBlur = 0;
     }
 
-    // Day
+    // Day (TimeManager에서 가져오기)
     if (revealProgress > 0.2) {
       const dayAlpha = Math.min(1, (revealProgress - 0.2) * 5);
       ctx.globalAlpha = dayAlpha;
+      const timeStatus = timeManager.getStatusSummary();
 
       ctx.font = '20px DungGeunMo, sans-serif';
       ctx.fillStyle = '#888';
-      ctx.fillText(`Day ${this.game.playerData.day}`, centerX, this.config.height * 0.3);
+      ctx.fillText(`${timeStatus.day}일째 ${timeStatus.dayNameShort} ${timeStatus.periodInfo.icon}`, centerX, this.config.height * 0.3);
     }
 
     // 수익
@@ -1218,7 +1310,7 @@ export class SellState extends BaseState {
       ctx.font = '16px DungGeunMo, sans-serif';
       ctx.fillStyle = `rgba(255, 255, 255, ${blinkAlpha})`;
       ctx.textAlign = 'center';
-      ctx.fillText('터치하여 다음 날로 →', centerX, this.config.height - 50);
+      ctx.fillText('터치하여 가게로 돌아가기 →', centerX, this.config.height - 50);
     }
   }
 }

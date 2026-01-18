@@ -1,6 +1,6 @@
 /**
  * PrepState - 재료 준비 단계 (고품질 리팩토링)
- * 3가지 미니게임: 카다이프 썰기, 피스타치오 분쇄, 마시멜로우 반죽
+ * 3가지 미니게임: 카다이프 썰기, 피스타치오 분쇄, 마시멜로우 녹이기
  *
  * 사운드 + 파티클 + 키치한 비주얼 적용
  */
@@ -10,18 +10,44 @@ import { GameState } from '../core/StateManager.js';
 import { COLORS } from '../core/ParticleSystem.js';
 import { recipeManager } from '../core/RecipeManager.js';
 
+/**
+ * 마시멜로우 녹이기 게임 설정 상수
+ * @constant
+ */
+const MELT_CONFIG = {
+  // 불 세기별 설정 (약불/중불/강불)
+  HEAT_LEVELS: [
+    { name: '약불', meltRate: 0.8, stickRate: 0.3, color: '#4ECDC4', icon: '🔵' },
+    { name: '중불', meltRate: 1.5, stickRate: 0.8, color: '#FFD93D', icon: '🟡' },
+    { name: '강불', meltRate: 2.5, stickRate: 2.0, color: '#FF6B6B', icon: '🔴' }
+  ],
+  // 들러붙음 관련
+  STICK_THRESHOLD: 100,           // 들러붙음 최대치
+  STICK_RESOLVE_PER_TAP: 12,      // 연타 1회당 감소량
+  STICK_PENALTY_SCORE: 5,         // 들러붙음 시 점수 페널티
+  // 코코아 관련
+  COCOA_OPTIMAL_MIN: 40,          // 코코아 투입 적정 구간 시작 (%)
+  COCOA_OPTIMAL_MAX: 70,          // 코코아 투입 적정 구간 끝 (%)
+  COCOA_PERFECT_BONUS: 25,        // 적정 타이밍 보너스
+  COCOA_EARLY_PENALTY: 10,        // 너무 빠름 페널티
+  COCOA_LATE_PENALTY: 15,         // 너무 늦음 페널티
+  // 목표
+  MELT_TARGET: 100,               // 녹임 목표치
+  BASE_SCORE_PER_PERCENT: 0.8     // 1% 녹일 때마다 기본 점수
+};
+
 export class PrepState extends BaseState {
   constructor(game) {
     super(game);
 
     // 미니게임 단계
     this.phase = 0; // 0: 카다이프, 1: 피스타치오, 2: 마시멜로우
-    this.phaseNames = ['카다이프 썰기', '피스타치오 분쇄', '마시멜로우 반죽'];
-    this.phaseIcons = ['🥖', '🥜', '🍡'];
+    this.phaseNames = ['카다이프 썰기', '피스타치오 분쇄', '마시멜로우 녹이기'];
+    this.phaseIcons = ['🥖', '🥜', '🍫'];
     this.phaseDescriptions = [
       '날아오는 카다이프를 스와이프로 썰어라!',
       '피스타치오를 터치해서 으깨라!',
-      '원을 그려 반죽을 쫀득하게!'
+      '불 조절하며 마시멜로우를 녹여라!'
     ];
 
     // 공통 게임 상태
@@ -53,15 +79,19 @@ export class PrepState extends BaseState {
     this.isFever = false;
     this.feverTimer = 0;
 
-    // 마시멜로우 게임
-    this.rpm = 0;
-    this.targetRpm = 70;
-    this.perfectZone = { min: 60, max: 80 };
-    this.isOverheated = false;
-    this.overheatedTimer = 0;
-    this.doughPhase = 0; // 반죽 상태 0~1
-    this.spinAngle = 0;
-    this.lastDragAngle = 0; // delta angle 계산용
+    // 마시멜로우 녹이기 게임 (리팩토링)
+    this.melt = {
+      progress: 0,              // 녹음 진행도 (0~100)
+      heatLevel: 0,             // 현재 불 세기 (0: 약불, 1: 중불, 2: 강불)
+      stickGauge: 0,            // 들러붙음 게이지 (0~100)
+      isStuck: false,           // 들러붙음 상태 (연타 모드)
+      cocoaAdded: false,        // 코코아 투입 여부
+      cocoaBonus: 0,            // 코코아 타이밍 보너스
+      bubbleTimer: 0,           // 버블 이펙트 타이머
+      sizzleTimer: 0,           // 지글 사운드 타이머
+      stirCount: 0,             // 젓기 횟수 (연타)
+      lastStickSound: 0         // 마지막 찌직 소리 시간
+    };
   }
 
   enter() {
@@ -101,11 +131,19 @@ export class PrepState extends BaseState {
       this.feverGauge = 0;
       this.isFever = false;
     } else if (this.phase === 2) {
-      this.rpm = 0;
-      this.isOverheated = false;
-      this.doughPhase = 0;
-      this.spinAngle = 0;
-      this.lastDragAngle = 0;
+      // 마시멜로우 녹이기 초기화
+      this.melt = {
+        progress: 0,
+        heatLevel: 0,       // 약불로 시작
+        stickGauge: 0,
+        isStuck: false,
+        cocoaAdded: false,
+        cocoaBonus: 0,
+        bubbleTimer: 0,
+        sizzleTimer: 0,
+        stirCount: 0,
+        lastStickSound: 0
+      };
     }
 
     this.game.sound.playUIClick();
@@ -136,6 +174,118 @@ export class PrepState extends BaseState {
     if (this.phase === 1 && this.isPlaying) {
       this.checkPistachioHit(pos);
     }
+
+    // 마시멜로우 녹이기 게임 터치
+    if (this.phase === 2 && this.isPlaying) {
+      this.handleMarshmallowTap(pos);
+    }
+  }
+
+  /**
+   * 마시멜로우 녹이기 게임 터치 처리
+   * @param {{x: number, y: number}} pos - 터치 위치
+   */
+  handleMarshmallowTap(pos) {
+    const W = this.config.width;
+    const H = this.config.height;
+
+    // 들러붙음 상태일 때 - 연타로 해소
+    if (this.melt.isStuck) {
+      this.melt.stirCount++;
+      this.melt.stickGauge -= MELT_CONFIG.STICK_RESOLVE_PER_TAP;
+      this.game.sound.playTap();
+      this.game.particles.emitTapSuccess(pos.x, pos.y);
+      this.addCombo();
+
+      // 들러붙음 해소
+      if (this.melt.stickGauge <= 0) {
+        this.melt.stickGauge = 0;
+        this.melt.isStuck = false;
+        this.melt.stirCount = 0;
+        this.game.sound.playSuccess();
+        this.game.particles.emitSparkle(W / 2, H * 0.45, COLORS.ui.green);
+      }
+      return;
+    }
+
+    // 불 조절 버튼 체크 (화면 하단 좌측)
+    const heatBtnY = H - 160;
+    const heatBtnStartX = 30;
+    const heatBtnWidth = 80;
+    const heatBtnHeight = 50;
+    const heatBtnGap = 10;
+
+    for (let i = 0; i < 3; i++) {
+      const btnX = heatBtnStartX + i * (heatBtnWidth + heatBtnGap);
+      const btnRect = { x: btnX, y: heatBtnY, width: heatBtnWidth, height: heatBtnHeight };
+
+      if (this.isPointInRect(pos, btnRect)) {
+        if (this.melt.heatLevel !== i) {
+          this.melt.heatLevel = i;
+          this.game.sound.playUIClick();
+          this.shakeIntensity = 3;
+        }
+        return;
+      }
+    }
+
+    // 코코아 투입 버튼 체크 (화면 하단 우측)
+    const cocoaBtnRect = { x: W - 110, y: heatBtnY, width: 80, height: heatBtnHeight };
+    if (this.isPointInRect(pos, cocoaBtnRect) && !this.melt.cocoaAdded) {
+      this.addCocoa();
+      return;
+    }
+
+    // 냄비 영역 터치 - 젓기 (예방적 젓기)
+    const potArea = { x: W / 2 - 80, y: H * 0.3, width: 160, height: 150 };
+    if (this.isPointInRect(pos, potArea) && !this.melt.isStuck) {
+      // 들러붙음 게이지 약간 감소 (예방)
+      this.melt.stickGauge = Math.max(0, this.melt.stickGauge - 3);
+      this.game.sound.playTap();
+
+      // 살짝 반응
+      const potCenterX = W / 2;
+      const potCenterY = H * 0.45;
+      this.game.particles.emitMeltBubble(potCenterX, potCenterY, this.melt.cocoaAdded);
+    }
+  }
+
+  /**
+   * 코코아 투입 처리
+   */
+  addCocoa() {
+    if (this.melt.cocoaAdded) return;
+
+    this.melt.cocoaAdded = true;
+    const progress = this.melt.progress;
+    const centerX = this.config.width / 2;
+    const centerY = this.config.height * 0.45;
+
+    // 파티클 & 사운드
+    this.game.sound.playCocoaPour();
+    this.game.particles.emitCocoaPour(centerX, centerY);
+
+    // 타이밍 보너스 계산
+    if (progress >= MELT_CONFIG.COCOA_OPTIMAL_MIN && progress <= MELT_CONFIG.COCOA_OPTIMAL_MAX) {
+      // 퍼펙트 타이밍!
+      this.melt.cocoaBonus = MELT_CONFIG.COCOA_PERFECT_BONUS;
+      this.score += MELT_CONFIG.COCOA_PERFECT_BONUS;
+      this.game.particles.emitPerfectTiming(centerX, centerY);
+      this.game.sound.playFanfare();
+      this.shakeIntensity = 8;
+    } else if (progress < MELT_CONFIG.COCOA_OPTIMAL_MIN) {
+      // 너무 빨리
+      this.melt.cocoaBonus = -MELT_CONFIG.COCOA_EARLY_PENALTY;
+      this.score = Math.max(0, this.score - MELT_CONFIG.COCOA_EARLY_PENALTY);
+      this.game.sound.playFail();
+      this.shakeIntensity = 5;
+    } else {
+      // 너무 늦게
+      this.melt.cocoaBonus = -MELT_CONFIG.COCOA_LATE_PENALTY;
+      this.score = Math.max(0, this.score - MELT_CONFIG.COCOA_LATE_PENALTY);
+      this.game.sound.playFail();
+      this.shakeIntensity = 5;
+    }
   }
 
   handleDrag(pos, dist, angle) {
@@ -147,33 +297,20 @@ export class PrepState extends BaseState {
       this.checkKadaifSlice(pos);
     }
 
-    // 마시멜로우 게임 회전
-    if (this.phase === 2 && !this.isOverheated) {
-      // delta angle 계산 (부호 있는 값과 절대값 분리)
-      const signedDelta = angle - this.lastDragAngle;
-      const deltaAngle = Math.abs(signedDelta);
-      this.lastDragAngle = angle;
+    // 마시멜로우 녹이기 - 드래그로 젓기 (들러붙음 예방)
+    if (this.phase === 2 && !this.melt.isStuck) {
+      const W = this.config.width;
+      const H = this.config.height;
+      const potArea = { x: W / 2 - 80, y: H * 0.3, width: 160, height: 150 };
 
-      // deltaAngle 기반으로 RPM 증가 (스케일 조정)
-      const rpmIncrease = deltaAngle * 120;
-      this.rpm = Math.min(100, this.rpm + rpmIncrease);
-      this.spinAngle += signedDelta; // 방향 유지한 회전
+      if (this.isPointInRect(pos, potArea)) {
+        // 드래그 거리에 비례해서 들러붙음 감소
+        this.melt.stickGauge = Math.max(0, this.melt.stickGauge - dist * 0.5);
 
-      // 스핀 효과음 & 파티클
-      if (deltaAngle > 0.02) {
-        this.game.sound.playSpin(this.rpm);
-
-        const centerX = this.config.width / 2;
-        const centerY = this.config.height * 0.5;
-        this.game.particles.emitSpin(centerX, centerY, this.spinAngle, this.rpm / 100);
-      }
-
-      // 과열 체크
-      if (this.rpm >= 100) {
-        this.isOverheated = true;
-        this.overheatedTimer = 1.5;
-        this.game.sound.playFail();
-        this.shakeIntensity = 10;
+        // 버블 이펙트
+        if (Math.random() < 0.3) {
+          this.game.particles.emitMeltBubble(pos.x, pos.y, this.melt.cocoaAdded);
+        }
       }
     }
   }
@@ -626,37 +763,112 @@ export class PrepState extends BaseState {
     });
   }
 
-  // ========== 마시멜로우 반죽 ==========
+  // ========== 마시멜로우 녹이기 (타이쿤 스타일) ==========
+
+  /**
+   * 마시멜로우 녹이기 게임 업데이트
+   * @param {number} dt - 델타 타임
+   */
   updateMarshmallow(dt) {
-    // 과열 타이머
-    if (this.isOverheated) {
-      this.overheatedTimer -= dt;
-      if (this.overheatedTimer <= 0) {
-        this.isOverheated = false;
-        this.rpm = 50; // 리셋
+    const W = this.config.width;
+    const H = this.config.height;
+    const potCenterX = W / 2;
+    const potCenterY = H * 0.45;
+
+    // 들러붙음 상태면 진행 중단
+    if (this.melt.isStuck) {
+      // 연기/찌직 효과
+      if (Math.random() < dt * 3) {
+        this.game.particles.emitStickWarning(potCenterX, potCenterY);
+      }
+      return;
+    }
+
+    // 현재 불 세기 설정 가져오기
+    const heatConfig = MELT_CONFIG.HEAT_LEVELS[this.melt.heatLevel];
+
+    // 1. 녹음 진행도 증가
+    if (this.melt.progress < MELT_CONFIG.MELT_TARGET) {
+      const previousProgress = this.melt.progress;
+      this.melt.progress = Math.min(
+        MELT_CONFIG.MELT_TARGET,
+        this.melt.progress + heatConfig.meltRate * dt
+      );
+
+      // 점수 증가 (녹은 양에 비례)
+      const progressDelta = this.melt.progress - previousProgress;
+      this.score += progressDelta * MELT_CONFIG.BASE_SCORE_PER_PERCENT;
+
+      // 버블 이펙트 (불 세기에 따라 빈도 조절)
+      this.melt.bubbleTimer += dt;
+      const bubbleInterval = 0.3 - this.melt.heatLevel * 0.08;
+      if (this.melt.bubbleTimer >= bubbleInterval) {
+        this.melt.bubbleTimer = 0;
+        this.game.particles.emitMeltBubble(potCenterX, potCenterY, this.melt.cocoaAdded);
+        this.game.sound.playBubble();
       }
     }
 
-    // RPM 자연 감소
-    if (!this.game.inputManager.isDragging && !this.isOverheated) {
-      this.rpm = Math.max(0, this.rpm - dt * 25);
+    // 2. 들러붙음 게이지 증가 (불 세기에 따라)
+    this.melt.stickGauge += heatConfig.stickRate * dt;
+
+    // 지글지글 사운드 (주기적)
+    this.melt.sizzleTimer += dt;
+    const sizzleInterval = 0.4 - this.melt.heatLevel * 0.1;
+    if (this.melt.sizzleTimer >= sizzleInterval) {
+      this.melt.sizzleTimer = 0;
+      this.game.sound.playSizzle(this.melt.heatLevel / 2);
     }
 
-    // Perfect Zone 체크
-    const inPerfectZone = this.rpm >= this.perfectZone.min && this.rpm <= this.perfectZone.max;
-    if (inPerfectZone && !this.isOverheated) {
-      this.score += dt * 35;
-      this.doughPhase = Math.min(1, this.doughPhase + dt * 0.15);
+    // 불꽃 이펙트
+    if (Math.random() < dt * (2 + this.melt.heatLevel * 2)) {
+      this.game.particles.emitFlame(potCenterX, H * 0.58, this.melt.heatLevel);
+    }
 
-      // 쫀득쫀득 효과
-      if (Math.random() < dt * 3) {
-        const centerX = this.config.width / 2;
-        const centerY = this.config.height * 0.5;
-        this.game.particles.emitSparkle(
-          centerX + (Math.random() - 0.5) * 80,
-          centerY + (Math.random() - 0.5) * 80,
-          COLORS.marshmallow.cream
-        );
+    // 3. 들러붙음 경고 (70% 이상)
+    if (this.melt.stickGauge >= 70 && this.melt.stickGauge < MELT_CONFIG.STICK_THRESHOLD) {
+      const now = Date.now();
+      if (now - this.melt.lastStickSound > 800) {
+        this.melt.lastStickSound = now;
+        this.game.sound.playStick();
+        this.shakeIntensity = 4;
+      }
+    }
+
+    // 4. 들러붙음 발생!
+    if (this.melt.stickGauge >= MELT_CONFIG.STICK_THRESHOLD) {
+      this.melt.stickGauge = MELT_CONFIG.STICK_THRESHOLD;
+      this.melt.isStuck = true;
+      this.score = Math.max(0, this.score - MELT_CONFIG.STICK_PENALTY_SCORE);
+      this.combo = 0;
+      this.game.sound.playFail();
+      this.game.particles.emitStickWarning(potCenterX, potCenterY);
+      this.game.particles.emitScreenFlash(W, H, '#FF6B6B');
+      this.shakeIntensity = 12;
+    }
+
+    // 5. 100% 녹음 완료 시 조기 종료 보너스
+    if (this.melt.progress >= MELT_CONFIG.MELT_TARGET && this.timeLeft > 0) {
+      // 남은 시간 보너스
+      const timeBonus = Math.floor(this.timeLeft * 2);
+      this.score += timeBonus;
+
+      // 코코아 미투입 페널티
+      if (!this.melt.cocoaAdded) {
+        this.score = Math.max(0, this.score - 20);
+      }
+
+      // 완료 처리
+      this.timeLeft = 0;
+      this.isPlaying = false;
+      this.showResult = true;
+      this.game.sound.playSuccess();
+      this.game.particles.emitCelebration(W / 2, H / 2, W, H);
+
+      // 퍼펙트 기록
+      const PERFECT_THRESHOLD = 80;
+      if (this.score >= PERFECT_THRESHOLD) {
+        recipeManager.recordPerfect('marshmallow');
       }
     }
   }
@@ -1117,149 +1329,514 @@ export class PrepState extends BaseState {
     }
   }
 
+  /**
+   * 마시멜로우 녹이기 게임 렌더링
+   */
   renderMarshmallow(ctx) {
-    const centerX = this.config.width / 2;
-    const centerY = this.config.height * 0.5;
+    const W = this.config.width;
+    const H = this.config.height;
+    const centerX = W / 2;
+    const potCenterY = H * 0.45;
 
-    // 회전 가이드
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([10, 10]);
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 100, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    // 1. 냄비 렌더링
+    this.renderPot(ctx, centerX, potCenterY);
 
-    // 화살표 가이드
-    if (this.rpm < 20) {
-      ctx.font = '24px sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
-      ctx.textAlign = 'center';
-      const arrowAngle = Date.now() / 500;
-      const arrowX = centerX + Math.cos(arrowAngle) * 80;
-      const arrowY = centerY + Math.sin(arrowAngle) * 80;
-      ctx.fillText('↻', arrowX, arrowY);
-    }
+    // 2. 마시멜로우 렌더링
+    this.renderMeltingMarshmallow(ctx, centerX, potCenterY);
 
-    // 반죽
-    this.renderDough(ctx, centerX, centerY);
+    // 3. 녹음 진행도 게이지
+    this.renderMeltProgressGauge(ctx);
 
-    // RPM 게이지
-    this.renderRPMGauge(ctx);
+    // 4. 들러붙음 게이지
+    this.renderStickGauge(ctx);
 
-    // 상태 텍스트
-    ctx.font = '16px DungGeunMo, sans-serif';
-    ctx.textAlign = 'center';
+    // 5. 불 조절 버튼
+    this.renderHeatButtons(ctx);
 
-    if (this.isOverheated) {
-      ctx.fillStyle = COLORS.ui.red;
-      ctx.fillText('과열! 잠시 기다리세요...', centerX, this.config.height - 60);
-    } else if (this.rpm >= this.perfectZone.min && this.rpm <= this.perfectZone.max) {
-      ctx.fillStyle = COLORS.ui.green;
-      ctx.fillText('✨ 쫀득쫀득~ Perfect! ✨', centerX, this.config.height - 60);
-    } else {
-      ctx.fillStyle = '#888';
-      ctx.fillText('원을 그리며 돌려주세요!', centerX, this.config.height - 60);
+    // 6. 코코아 버튼
+    this.renderCocoaButton(ctx);
+
+    // 7. 상태 텍스트
+    this.renderMeltStatusText(ctx);
+
+    // 8. 들러붙음 연타 UI
+    if (this.melt.isStuck) {
+      this.renderStuckOverlay(ctx);
     }
   }
 
-  renderDough(ctx, centerX, centerY) {
+  /**
+   * 냄비 렌더링
+   */
+  renderPot(ctx, x, y) {
+    const heatConfig = MELT_CONFIG.HEAT_LEVELS[this.melt.heatLevel];
+
+    // 냄비 그림자
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 70, 90, 25, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 불꽃 베이스 (냄비 아래)
+    const flameGradient = ctx.createRadialGradient(x, y + 55, 0, x, y + 55, 70);
+    flameGradient.addColorStop(0, heatConfig.color);
+    flameGradient.addColorStop(0.5, `${heatConfig.color}66`);
+    flameGradient.addColorStop(1, 'transparent');
+    ctx.fillStyle = flameGradient;
+    ctx.beginPath();
+    ctx.ellipse(x, y + 55, 70, 30, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 냄비 몸체
+    const potGradient = ctx.createLinearGradient(x - 80, y, x + 80, y);
+    potGradient.addColorStop(0, '#2C3E50');
+    potGradient.addColorStop(0.3, '#4A5568');
+    potGradient.addColorStop(0.7, '#4A5568');
+    potGradient.addColorStop(1, '#2C3E50');
+    ctx.fillStyle = potGradient;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 80, 50, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 냄비 테두리
+    ctx.strokeStyle = '#1A202C';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 80, 50, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 냄비 내부 (어두운 부분)
+    ctx.fillStyle = '#1A1A2E';
+    ctx.beginPath();
+    ctx.ellipse(x, y - 5, 65, 35, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 냄비 손잡이
+    ctx.fillStyle = '#4A5568';
+    ctx.fillRect(x - 100, y - 8, 25, 16);
+    ctx.fillRect(x + 75, y - 8, 25, 16);
+  }
+
+  /**
+   * 녹는 마시멜로우 렌더링
+   */
+  renderMeltingMarshmallow(ctx, x, y) {
+    const progress = this.melt.progress / 100;
+    const hasCocoaAdded = this.melt.cocoaAdded;
+
+    // 마시멜로우 색상 (코코아 섞임에 따라)
+    let baseColor, highlightColor;
+    if (hasCocoaAdded) {
+      // 코코아 섞인 갈색
+      const cocoa = Math.min(progress, 0.7);
+      const r = Math.floor(255 - cocoa * 160);
+      const g = Math.floor(250 - cocoa * 170);
+      const b = Math.floor(240 - cocoa * 150);
+      baseColor = `rgb(${r},${g},${b})`;
+      highlightColor = `rgba(255,255,255,${0.3 - cocoa * 0.2})`;
+    } else {
+      // 흰색 마시멜로우
+      baseColor = COLORS.marshmallow.white;
+      highlightColor = 'rgba(255,255,255,0.5)';
+    }
+
+    // 녹음 상태에 따른 형태
     ctx.save();
-    ctx.translate(centerX, centerY);
-    ctx.rotate(this.spinAngle * 0.1);
-
-    // 반죽 크기 (rpm에 따라)
-    const baseSize = 50;
-    const maxSize = 80;
-    const size = baseSize + (maxSize - baseSize) * this.doughPhase;
-
-    // 색상 (익을수록 변화)
-    const r = Math.floor(255 - this.doughPhase * 20);
-    const g = Math.floor(240 - this.doughPhase * 30);
-    const b = Math.floor(230 - this.doughPhase * 40);
-    const doughColor = `rgb(${r},${g},${b})`;
+    ctx.translate(x, y - 5);
 
     // 그림자
     ctx.shadowColor = 'rgba(0,0,0,0.3)';
-    ctx.shadowBlur = 15;
-    ctx.shadowOffsetY = 10;
+    ctx.shadowBlur = 10;
 
-    // 반죽 본체
-    ctx.fillStyle = doughColor;
+    ctx.fillStyle = baseColor;
     ctx.beginPath();
 
-    if (this.doughPhase < 0.3) {
-      // 납작
-      ctx.ellipse(0, 0, size * 1.3, size * 0.5, 0, 0, Math.PI * 2);
-    } else if (this.doughPhase < 0.7) {
-      // 울퉁불퉁
-      const wobble = Math.sin(Date.now() / 100) * 5;
-      for (let i = 0; i < 8; i++) {
-        const angle = (i / 8) * Math.PI * 2;
-        const r = size * (0.8 + Math.sin(i * 2 + wobble) * 0.2);
-        const x = Math.cos(angle) * r;
-        const y = Math.sin(angle) * r * 0.7;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+    if (progress < 0.3) {
+      // 덩어리 상태 (여러 개의 마시멜로우)
+      const chunks = 5;
+      for (let i = 0; i < chunks; i++) {
+        const angle = (i / chunks) * Math.PI * 2;
+        const dist = 25 - progress * 30;
+        const cx = Math.cos(angle) * dist;
+        const cy = Math.sin(angle) * dist * 0.5;
+        const size = 18 - progress * 20;
+
+        ctx.moveTo(cx + size, cy);
+        ctx.arc(cx, cy, size, 0, Math.PI * 2);
+      }
+      // 중앙 덩어리
+      ctx.moveTo(20, 0);
+      ctx.arc(0, 0, 20 - progress * 10, 0, Math.PI * 2);
+    } else if (progress < 0.7) {
+      // 반쯤 녹은 상태 (울퉁불퉁)
+      const wobble = Math.sin(Date.now() / 150) * 3;
+      const baseRadius = 45;
+      for (let i = 0; i < 12; i++) {
+        const angle = (i / 12) * Math.PI * 2;
+        const variance = Math.sin(i * 3 + wobble) * 8;
+        const r = baseRadius + variance;
+        const px = Math.cos(angle) * r;
+        const py = Math.sin(angle) * r * 0.4;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
       }
       ctx.closePath();
     } else {
-      // 동그랗게
-      ctx.arc(0, 0, size, 0, Math.PI * 2);
+      // 완전히 녹은 상태 (부드러운 타원)
+      const wobble = Math.sin(Date.now() / 200) * 2;
+      ctx.ellipse(0, 0, 55 + wobble, 25, 0, 0, Math.PI * 2);
     }
+
     ctx.fill();
 
     // 하이라이트
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.fillStyle = highlightColor;
     ctx.beginPath();
-    ctx.ellipse(-size * 0.3, -size * 0.3, size * 0.25, size * 0.2, -0.5, 0, Math.PI * 2);
+    if (progress < 0.5) {
+      ctx.ellipse(-10, -10, 12, 8, -0.5, 0, Math.PI * 2);
+    } else {
+      ctx.ellipse(-20, -8, 20, 8, -0.3, 0, Math.PI * 2);
+    }
     ctx.fill();
+
+    // 기포 효과 (녹는 중)
+    if (progress > 0.2 && progress < 1) {
+      const bubbleCount = Math.floor(progress * 5);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      for (let i = 0; i < bubbleCount; i++) {
+        const bx = (Math.sin(Date.now() / 300 + i * 2) * 30);
+        const by = (Math.cos(Date.now() / 400 + i * 3) * 10);
+        const bSize = 3 + Math.sin(Date.now() / 200 + i) * 2;
+        ctx.beginPath();
+        ctx.arc(bx, by, bSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
 
     ctx.shadowBlur = 0;
     ctx.restore();
   }
 
-  renderRPMGauge(ctx) {
-    const gaugeY = this.config.height - 130;
-    const gaugeWidth = this.config.width - 80;
-    const gaugeX = 40;
-    const gaugeHeight = 25;
+  /**
+   * 녹음 진행도 게이지
+   */
+  renderMeltProgressGauge(ctx) {
+    const W = this.config.width;
+    const gaugeWidth = W - 60;
+    const gaugeX = 30;
+    const gaugeY = 130;
+    const gaugeHeight = 20;
 
     // 라벨
     ctx.font = '12px DungGeunMo, sans-serif';
-    ctx.fillStyle = '#888';
-    ctx.textAlign = 'center';
-    ctx.fillText('속도 조절', this.config.width / 2, gaugeY - 8);
+    ctx.fillStyle = '#aaa';
+    ctx.textAlign = 'left';
+    ctx.fillText('녹음 진행도', gaugeX, gaugeY - 5);
+
+    // 퍼센트 표시
+    ctx.textAlign = 'right';
+    ctx.fillStyle = COLORS.ui.gold;
+    ctx.fillText(`${Math.floor(this.melt.progress)}%`, gaugeX + gaugeWidth, gaugeY - 5);
 
     // 배경
     ctx.fillStyle = '#222';
-    ctx.fillRect(gaugeX, gaugeY, gaugeWidth, gaugeHeight);
-
-    // Perfect Zone 표시
-    const zoneStart = gaugeX + gaugeWidth * (this.perfectZone.min / 100);
-    const zoneWidth = gaugeWidth * ((this.perfectZone.max - this.perfectZone.min) / 100);
-    ctx.fillStyle = 'rgba(46, 204, 113, 0.4)';
-    ctx.fillRect(zoneStart, gaugeY, zoneWidth, gaugeHeight);
-
-    // Perfect Zone 라벨
-    ctx.font = '10px DungGeunMo, sans-serif';
-    ctx.fillStyle = COLORS.ui.green;
-    ctx.fillText('PERFECT', zoneStart + zoneWidth / 2, gaugeY + 16);
-
-    // 현재 RPM 인디케이터
-    const rpmX = gaugeX + gaugeWidth * (Math.min(this.rpm, 100) / 100);
-    ctx.fillStyle = this.isOverheated ? COLORS.ui.red : COLORS.ui.gold;
     ctx.beginPath();
-    ctx.moveTo(rpmX, gaugeY - 5);
-    ctx.lineTo(rpmX - 8, gaugeY + gaugeHeight + 5);
-    ctx.lineTo(rpmX + 8, gaugeY + gaugeHeight + 5);
-    ctx.closePath();
+    ctx.roundRect(gaugeX, gaugeY, gaugeWidth, gaugeHeight, 5);
+    ctx.fill();
+
+    // 코코아 적정 구간 표시
+    const optimalStart = gaugeX + gaugeWidth * (MELT_CONFIG.COCOA_OPTIMAL_MIN / 100);
+    const optimalWidth = gaugeWidth * ((MELT_CONFIG.COCOA_OPTIMAL_MAX - MELT_CONFIG.COCOA_OPTIMAL_MIN) / 100);
+    ctx.fillStyle = 'rgba(93, 64, 55, 0.4)';
+    ctx.fillRect(optimalStart, gaugeY, optimalWidth, gaugeHeight);
+
+    // 코코아 아이콘 (적정 구간)
+    if (!this.melt.cocoaAdded) {
+      ctx.font = '10px DungGeunMo, sans-serif';
+      ctx.fillStyle = COLORS.cocoa.light;
+      ctx.textAlign = 'center';
+      ctx.fillText('🍫 코코아', optimalStart + optimalWidth / 2, gaugeY + 14);
+    }
+
+    // 진행 게이지
+    const progressWidth = gaugeWidth * (this.melt.progress / 100);
+    const progressGradient = ctx.createLinearGradient(gaugeX, 0, gaugeX + progressWidth, 0);
+    progressGradient.addColorStop(0, COLORS.marshmallow.cream);
+    progressGradient.addColorStop(1, this.melt.cocoaAdded ? COLORS.cocoa.light : COLORS.marshmallow.pink);
+    ctx.fillStyle = progressGradient;
+    ctx.beginPath();
+    ctx.roundRect(gaugeX, gaugeY, progressWidth, gaugeHeight, 5);
     ctx.fill();
 
     // 테두리
     ctx.strokeStyle = '#444';
     ctx.lineWidth = 2;
-    ctx.strokeRect(gaugeX, gaugeY, gaugeWidth, gaugeHeight);
+    ctx.beginPath();
+    ctx.roundRect(gaugeX, gaugeY, gaugeWidth, gaugeHeight, 5);
+    ctx.stroke();
+  }
+
+  /**
+   * 들러붙음 게이지
+   */
+  renderStickGauge(ctx) {
+    const W = this.config.width;
+    const gaugeWidth = W - 60;
+    const gaugeX = 30;
+    const gaugeY = 170;
+    const gaugeHeight = 16;
+
+    // 라벨
+    ctx.font = '11px DungGeunMo, sans-serif';
+    ctx.fillStyle = this.melt.stickGauge > 70 ? COLORS.ui.red : '#888';
+    ctx.textAlign = 'left';
+    ctx.fillText('⚠️ 들러붙음', gaugeX, gaugeY - 4);
+
+    // 배경
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.roundRect(gaugeX, gaugeY, gaugeWidth, gaugeHeight, 4);
+    ctx.fill();
+
+    // 위험 구간 표시 (70% 이상)
+    const dangerStart = gaugeX + gaugeWidth * 0.7;
+    ctx.fillStyle = 'rgba(231, 76, 60, 0.3)';
+    ctx.fillRect(dangerStart, gaugeY, gaugeWidth * 0.3, gaugeHeight);
+
+    // 들러붙음 게이지
+    const stickWidth = gaugeWidth * (this.melt.stickGauge / 100);
+    let stickColor;
+    if (this.melt.stickGauge < 50) {
+      stickColor = COLORS.ui.green;
+    } else if (this.melt.stickGauge < 70) {
+      stickColor = COLORS.ui.gold;
+    } else {
+      stickColor = COLORS.ui.red;
+    }
+
+    // 깜빡임 효과 (위험 구간)
+    if (this.melt.stickGauge > 70) {
+      const flicker = Math.sin(Date.now() / 100) > 0;
+      ctx.fillStyle = flicker ? stickColor : '#aa3333';
+    } else {
+      ctx.fillStyle = stickColor;
+    }
+
+    ctx.beginPath();
+    ctx.roundRect(gaugeX, gaugeY, stickWidth, gaugeHeight, 4);
+    ctx.fill();
+
+    // 테두리
+    ctx.strokeStyle = this.melt.stickGauge > 70 ? COLORS.ui.red : '#333';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(gaugeX, gaugeY, gaugeWidth, gaugeHeight, 4);
+    ctx.stroke();
+  }
+
+  /**
+   * 불 조절 버튼 렌더링
+   */
+  renderHeatButtons(ctx) {
+    const H = this.config.height;
+    const btnY = H - 160;
+    const btnStartX = 30;
+    const btnWidth = 80;
+    const btnHeight = 50;
+    const btnGap = 10;
+
+    ctx.font = 'bold 12px DungGeunMo, sans-serif';
+    ctx.textAlign = 'center';
+
+    for (let i = 0; i < 3; i++) {
+      const btnX = btnStartX + i * (btnWidth + btnGap);
+      const heatConfig = MELT_CONFIG.HEAT_LEVELS[i];
+      const isSelected = this.melt.heatLevel === i;
+
+      // 버튼 배경
+      if (isSelected) {
+        ctx.shadowColor = heatConfig.color;
+        ctx.shadowBlur = 15;
+        ctx.fillStyle = heatConfig.color;
+      } else {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#333';
+      }
+
+      ctx.beginPath();
+      ctx.roundRect(btnX, btnY, btnWidth, btnHeight, 8);
+      ctx.fill();
+
+      // 테두리
+      ctx.strokeStyle = isSelected ? '#fff' : '#555';
+      ctx.lineWidth = isSelected ? 3 : 1;
+      ctx.beginPath();
+      ctx.roundRect(btnX, btnY, btnWidth, btnHeight, 8);
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
+
+      // 아이콘
+      ctx.font = '18px sans-serif';
+      ctx.fillText(heatConfig.icon, btnX + btnWidth / 2, btnY + 22);
+
+      // 라벨
+      ctx.font = 'bold 11px DungGeunMo, sans-serif';
+      ctx.fillStyle = isSelected ? '#fff' : '#888';
+      ctx.fillText(heatConfig.name, btnX + btnWidth / 2, btnY + 42);
+    }
+  }
+
+  /**
+   * 코코아 버튼 렌더링
+   */
+  renderCocoaButton(ctx) {
+    const W = this.config.width;
+    const H = this.config.height;
+    const btnX = W - 110;
+    const btnY = H - 160;
+    const btnWidth = 80;
+    const btnHeight = 50;
+
+    const isAdded = this.melt.cocoaAdded;
+    const isOptimalTime = !isAdded &&
+      this.melt.progress >= MELT_CONFIG.COCOA_OPTIMAL_MIN &&
+      this.melt.progress <= MELT_CONFIG.COCOA_OPTIMAL_MAX;
+
+    // 버튼 배경
+    if (isAdded) {
+      ctx.fillStyle = '#2a2a2a';
+    } else if (isOptimalTime) {
+      // 적정 타이밍 - 반짝이는 효과
+      const pulse = Math.sin(Date.now() / 200) * 0.3 + 0.7;
+      ctx.shadowColor = COLORS.cocoa.light;
+      ctx.shadowBlur = 15 * pulse;
+      ctx.fillStyle = COLORS.cocoa.main;
+    } else {
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#444';
+    }
+
+    ctx.beginPath();
+    ctx.roundRect(btnX, btnY, btnWidth, btnHeight, 8);
+    ctx.fill();
+
+    // 테두리
+    ctx.strokeStyle = isOptimalTime ? COLORS.ui.gold : '#555';
+    ctx.lineWidth = isOptimalTime ? 2 : 1;
+    ctx.beginPath();
+    ctx.roundRect(btnX, btnY, btnWidth, btnHeight, 8);
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+
+    // 아이콘
+    ctx.font = '20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(isAdded ? '✓' : '🍫', btnX + btnWidth / 2, btnY + 24);
+
+    // 라벨
+    ctx.font = 'bold 10px DungGeunMo, sans-serif';
+    ctx.fillStyle = isAdded ? '#666' : (isOptimalTime ? COLORS.ui.gold : '#888');
+    ctx.fillText(isAdded ? '투입완료' : '코코아', btnX + btnWidth / 2, btnY + 42);
+
+    // 적정 타이밍 힌트
+    if (isOptimalTime && !isAdded) {
+      ctx.font = 'bold 10px DungGeunMo, sans-serif';
+      ctx.fillStyle = COLORS.ui.gold;
+      const flicker = Math.floor(Date.now() / 300) % 2 === 0;
+      if (flicker) {
+        ctx.fillText('지금!', btnX + btnWidth / 2, btnY - 8);
+      }
+    }
+  }
+
+  /**
+   * 상태 텍스트 렌더링
+   */
+  renderMeltStatusText(ctx) {
+    const W = this.config.width;
+    const H = this.config.height;
+
+    ctx.font = '14px DungGeunMo, sans-serif';
+    ctx.textAlign = 'center';
+
+    let statusText = '';
+    let statusColor = '#888';
+
+    if (this.melt.isStuck) {
+      statusText = '🚨 들러붙었어요! 빠르게 터치하세요!';
+      statusColor = COLORS.ui.red;
+    } else if (this.melt.progress >= 100) {
+      statusText = '✨ 완벽하게 녹았어요!';
+      statusColor = COLORS.ui.green;
+    } else if (this.melt.stickGauge > 70) {
+      statusText = '⚠️ 들러붙기 직전! 젓거나 불을 낮추세요!';
+      statusColor = COLORS.ui.red;
+    } else if (this.melt.heatLevel === 2) {
+      statusText = '🔥 강불! 빠르지만 위험해요!';
+      statusColor = '#FF6B6B';
+    } else if (this.melt.heatLevel === 0) {
+      statusText = '🔵 약불로 천천히 녹이는 중...';
+      statusColor = '#4ECDC4';
+    } else {
+      statusText = '🍡 마시멜로우가 녹고 있어요~';
+      statusColor = COLORS.marshmallow.cream;
+    }
+
+    ctx.fillStyle = statusColor;
+    ctx.fillText(statusText, W / 2, H - 85);
+  }
+
+  /**
+   * 들러붙음 연타 오버레이
+   */
+  renderStuckOverlay(ctx) {
+    const W = this.config.width;
+    const H = this.config.height;
+
+    // 반투명 오버레이
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(0, 0, W, H);
+
+    // 경고 박스
+    const boxWidth = 280;
+    const boxHeight = 150;
+    const boxX = (W - boxWidth) / 2;
+    const boxY = (H - boxHeight) / 2 - 50;
+
+    // 박스 배경 (빨간 테두리)
+    ctx.fillStyle = '#1a1a2e';
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 15);
+    ctx.fill();
+
+    const flicker = Math.sin(Date.now() / 100) > 0;
+    ctx.strokeStyle = flicker ? COLORS.ui.red : '#aa3333';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 15);
+    ctx.stroke();
+
+    // 경고 아이콘
+    ctx.font = '50px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🔥', W / 2, boxY + 55);
+
+    // 텍스트
+    ctx.font = 'bold 18px DungGeunMo, sans-serif';
+    ctx.fillStyle = COLORS.ui.red;
+    ctx.fillText('들러붙었어요!', W / 2, boxY + 90);
+
+    ctx.font = '14px DungGeunMo, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('화면을 빠르게 터치하세요!', W / 2, boxY + 115);
+
+    // 남은 들러붙음 게이지
+    const remainTaps = Math.ceil(this.melt.stickGauge / MELT_CONFIG.STICK_RESOLVE_PER_TAP);
+    ctx.font = 'bold 16px DungGeunMo, sans-serif';
+    ctx.fillStyle = COLORS.ui.gold;
+    ctx.fillText(`남은 터치: ${remainTaps}회`, W / 2, boxY + 140);
   }
 
   renderResult(ctx) {

@@ -52,6 +52,12 @@ export class Game {
     this.lastTime = 0;
     this.deltaTime = 0;
     this.isRunning = false;
+    this.isPaused = false; // [Mobile Opt] 백그라운드 일시정지 상태
+
+    // [Mobile Opt] 바운드 게임 루프 함수 (매 프레임 새 함수 생성 방지)
+    this._boundGameLoop = this.gameLoop.bind(this);
+    this._boundResize = this.resizeCanvas.bind(this);
+    this._boundVisibilityChange = this._handleVisibilityChange.bind(this);
 
     // 쿠키 스탯
     this.cookieStats = {
@@ -69,6 +75,10 @@ export class Game {
       reputation: 0,
       regulars: []    // 단골 목록
     };
+
+    // [Mobile Opt] 자동 저장 쓰로틀링
+    this._lastSaveTime = 0;
+    this._saveThrottleMs = 5000; // 5초 간격 저장
 
     // 개발 모드 로그
     if (this.config.devMode) {
@@ -107,7 +117,8 @@ export class Game {
     // 게임 루프 시작
     this.isRunning = true;
     this.lastTime = performance.now();
-    requestAnimationFrame((time) => this.gameLoop(time));
+    // [Mobile Opt] 바운드 함수로 매 프레임 새 함수 생성 방지
+    requestAnimationFrame(this._boundGameLoop);
 
     console.log('🍪 게임 시작!');
   }
@@ -117,14 +128,83 @@ export class Game {
    */
   setupCanvas() {
     this.canvas = document.getElementById(this.canvasId);
-    this.ctx = this.canvas.getContext('2d');
+    // [Mobile Opt] 2D 컨텍스트 힌트 설정
+    this.ctx = this.canvas.getContext('2d', {
+      alpha: false,           // 불투명 캔버스 (성능 향상)
+      desynchronized: true    // 레이턴시 감소 (지원 시)
+    });
 
     // 캔버스 크기 설정
     this.resizeCanvas();
-    window.addEventListener('resize', () => this.resizeCanvas());
+    // [Mobile Opt] 바운드 함수 사용
+    window.addEventListener('resize', this._boundResize);
+
+    // [Mobile Opt] 모바일 라이프사이클 이벤트
+    document.addEventListener('visibilitychange', this._boundVisibilityChange);
+    window.addEventListener('pagehide', () => this._handlePageHide());
+    window.addEventListener('blur', () => this._handleBlur());
+    window.addEventListener('focus', () => this._handleFocus());
 
     // 픽셀 아트 렌더링 설정
     this.ctx.imageSmoothingEnabled = false;
+  }
+
+  /**
+   * [Mobile Opt] 페이지 가시성 변경 핸들러 (탭 전환, 화면 끄기)
+   */
+  _handleVisibilityChange() {
+    if (document.hidden) {
+      this._pauseGame();
+      this.saveGameData(); // 백그라운드 진입 시 즉시 저장
+    } else {
+      this._resumeGame();
+    }
+  }
+
+  /**
+   * [Mobile Opt] 페이지 숨김 (iOS Safari 대응)
+   */
+  _handlePageHide() {
+    this._pauseGame();
+    this.saveGameData();
+  }
+
+  /**
+   * [Mobile Opt] 포커스 해제
+   */
+  _handleBlur() {
+    // 모바일에서 전화 수신 등
+    if (/Mobi|Android/i.test(navigator.userAgent)) {
+      this._pauseGame();
+    }
+  }
+
+  /**
+   * [Mobile Opt] 포커스 복귀
+   */
+  _handleFocus() {
+    if (this.isPaused) {
+      this._resumeGame();
+    }
+  }
+
+  /**
+   * [Mobile Opt] 게임 일시정지
+   */
+  _pauseGame() {
+    if (this.isPaused) return;
+    this.isPaused = true;
+    console.log('[Game] 일시정지 (백그라운드)');
+  }
+
+  /**
+   * [Mobile Opt] 게임 재개
+   */
+  _resumeGame() {
+    if (!this.isPaused) return;
+    this.isPaused = false;
+    this.lastTime = performance.now(); // 델타 타임 스파이크 방지
+    console.log('[Game] 재개');
   }
 
   /**
@@ -200,13 +280,23 @@ export class Game {
   gameLoop(currentTime) {
     if (!this.isRunning) return;
 
+    // [Mobile Opt] 일시정지 상태면 렌더링만 하고 업데이트 스킵
+    if (this.isPaused) {
+      requestAnimationFrame(this._boundGameLoop);
+      return;
+    }
+
     // 델타 타임 계산 (초 단위)
     this.deltaTime = (currentTime - this.lastTime) / 1000;
     this.lastTime = currentTime;
 
-    // FPS 제한
+    // [Mobile Opt] 델타 타임 클램핑 (백그라운드 복귀 시 스파이크 방지)
     if (this.deltaTime > 1 / 30) {
       this.deltaTime = 1 / 30;
+    }
+    // [Mobile Opt] 음수/0 방지
+    if (this.deltaTime <= 0) {
+      this.deltaTime = 1 / 60;
     }
 
     // 업데이트
@@ -215,8 +305,8 @@ export class Game {
     // 렌더링
     this.render();
 
-    // 다음 프레임 요청
-    requestAnimationFrame((time) => this.gameLoop(time));
+    // [Mobile Opt] 바운드 함수로 다음 프레임 요청
+    requestAnimationFrame(this._boundGameLoop);
   }
 
   /**
