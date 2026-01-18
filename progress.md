@@ -1810,3 +1810,366 @@ export const SHADOWS = {
 - `src/phaser/scenes/minigames/PistachioCrushScene.js` - 배경/UI 개선
 - `src/phaser/scenes/minigames/MarshmallowMeltScene.js` - 배경/UI 개선
 - `src/phaser/scenes/UIScene.js` - 헤더/모달 개선
+
+---
+
+## Phase 11: Phaser.js v2.0.0 대규모 업데이트 ✅
+**완료일: 2026-01-18**
+
+### 개요
+Phaser 3.80.1 기반으로 게임 엔진을 재구축하고, 미니게임 4종 및 핵심 시스템 구현.
+
+### 구현 내용
+- Phaser 3.80.1 통합 및 게임 엔진 재구축
+- 미니게임 4종 추가 (KadaifSlice, PistachioCrush, MarshmallowMelt, CocoaHelix)
+- 핵심 씬 구현 (Boot, Counter, Kitchen, UI)
+- 매니저 시스템 (GameManager, EventEmitter, EffectsManager)
+- 프리팹 구현 (Customer, Ingredient, Cookie, AssetFactory)
+- SoundManager 대폭 개선
+- Vitest 테스트 환경 추가
+
+### 생성된 파일
+```
+src/phaser/
+├── main.js
+├── config/GameConfig.js
+├── managers/
+│   ├── GameManager.js
+│   ├── EventEmitter.js
+│   └── EffectsManager.js
+├── scenes/
+│   ├── BootScene.js
+│   ├── CounterScene.js
+│   ├── KitchenScene.js
+│   ├── UIScene.js
+│   └── minigames/
+│       ├── KadaifSliceScene.js
+│       ├── PistachioCrushScene.js
+│       ├── MarshmallowMeltScene.js
+│       └── CocoaHelixScene.js
+└── prefabs/
+    ├── Customer.js
+    ├── Ingredient.js
+    ├── Cookie.js
+    └── AssetFactory.js
+```
+
+---
+
+# 🚨 반복되는 실수 & 버그 해결 가이드
+
+> 이 섹션은 개발 중 자주 발생한 문제와 해결 방법을 기록합니다.
+> **새로운 문제 해결 시 반드시 여기에 추가하세요.**
+
+---
+
+## 1. 터치/입력 이벤트 관련
+
+### 문제: 터치 이벤트가 중복 발생하거나 씹힘
+**증상:** 버튼 클릭이 여러 번 실행되거나 드래그가 끊김
+
+**원인:**
+- `touchstart`와 `mousedown` 이벤트 동시 바인딩
+- 이벤트 리스너 cleanup 누락
+
+**해결:**
+```javascript
+// ❌ 잘못된 방법
+canvas.addEventListener('touchstart', handler);
+canvas.addEventListener('mousedown', handler); // 터치 기기에서 둘 다 발생
+
+// ✅ 올바른 방법
+const isTouchDevice = 'ontouchstart' in window;
+if (isTouchDevice) {
+  canvas.addEventListener('touchstart', handler);
+} else {
+  canvas.addEventListener('mousedown', handler);
+}
+
+// 또는 Phaser 사용 시
+this.input.on('pointerdown', handler); // 자동으로 처리
+```
+
+**파훼법:** Phaser의 `input.on('pointerdown/move/up')` 사용 권장
+
+---
+
+### 문제: DecoState 드래그 입력이 작동 안 함
+**증상:** 데코레이션 아이템 드래그가 안 되거나 이상하게 동작
+
+**원인:**
+- `enter()` 메서드에서 이벤트 바인딩 누락
+- `exit()` 메서드에서 이벤트 언바인딩 누락
+- 좌표 변환 오류 (canvas vs screen 좌표)
+
+**해결:**
+```javascript
+// ✅ enter/exit에서 반드시 대칭적으로 처리
+enter() {
+  this.bindEvents();
+}
+
+exit() {
+  this.unbindEvents(); // 반드시!
+}
+
+// ✅ 좌표 변환
+const rect = canvas.getBoundingClientRect();
+const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+```
+
+---
+
+## 2. State 전환 관련
+
+### 문제: State 전환 시 이전 State 잔재가 남음
+**증상:** 화면에 이전 State의 UI가 남아있거나 이벤트가 계속 발생
+
+**원인:**
+- `exit()` 메서드에서 cleanup 누락
+- 타이머/인터벌 정리 안 함
+- 전역 이벤트 리스너 제거 안 함
+
+**해결:**
+```javascript
+exit() {
+  // ✅ 모든 타이머 정리
+  if (this.timer) {
+    clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  // ✅ 이벤트 리스너 제거
+  this.game.canvas.removeEventListener('touchstart', this.boundHandler);
+
+  // ✅ Phaser Scene인 경우
+  this.input.off('pointerdown');
+  this.tweens.killAll();
+}
+```
+
+**파훼법:** 모든 State에 cleanup 체크리스트 적용
+- [ ] 타이머/인터벌 정리
+- [ ] 이벤트 리스너 제거
+- [ ] Tween 정리
+- [ ] 오디오 정지
+
+---
+
+## 3. Phaser Scene 관련
+
+### 문제: Scene 전환 후 오브젝트가 남아있음
+**증상:** 이전 Scene의 스프라이트/텍스트가 새 Scene에 보임
+
+**원인:**
+- `this.scene.start()` 사용 시 자동 정리 안 됨 (일부 경우)
+- 전역 컨테이너에 추가된 오브젝트
+
+**해결:**
+```javascript
+// ✅ Scene 전환 전 명시적 정리
+this.children.removeAll(true); // 모든 자식 제거 및 destroy
+
+// ✅ 또는 shutdown 이벤트 사용
+this.events.on('shutdown', () => {
+  this.cleanupResources();
+});
+```
+
+---
+
+### 문제: Phaser에서 한글 폰트가 깨짐
+**증상:** 텍스트가 네모(□)로 표시되거나 폰트가 적용 안 됨
+
+**원인:**
+- 웹폰트 로딩 전 텍스트 생성
+- fontFamily 오타
+
+**해결:**
+```javascript
+// ✅ BootScene에서 폰트 로딩 대기
+preload() {
+  // WebFont 로더 사용 또는 CSS @font-face 로딩 완료 후 진행
+}
+
+// ✅ GameConfig.js의 FONT_FAMILY 상수 사용
+import { FONT_FAMILY, FONTS } from '../config/GameConfig.js';
+
+this.add.text(x, y, '텍스트', {
+  fontFamily: FONT_FAMILY, // 'DungGeunMo, Galmuri11, monospace'
+  fontSize: '24px'
+});
+```
+
+---
+
+## 4. 오디오 관련
+
+### 문제: iOS Safari에서 사운드가 안 남
+**증상:** iOS에서만 BGM/SFX가 재생 안 됨
+
+**원인:**
+- 브라우저 자동재생 정책 (사용자 제스처 필요)
+- AudioContext가 suspended 상태
+
+**해결:**
+```javascript
+// ✅ 첫 터치에서 AudioContext resume
+document.addEventListener('touchstart', () => {
+  if (audioContext.state === 'suspended') {
+    audioContext.resume();
+  }
+}, { once: true });
+
+// ✅ SoundManager에서 자동 처리
+// InputManager.js의 unlockAudio() 참조
+```
+
+**파훼법:** 게임 시작 전 "탭하여 시작" 화면 표시
+
+---
+
+## 5. localStorage 관련
+
+### 문제: 저장 데이터가 손상되거나 로드 실패
+**증상:** 게임 진행 데이터가 사라지거나 에러 발생
+
+**원인:**
+- JSON.parse 실패 (잘못된 형식)
+- 스키마 변경 후 이전 데이터 호환성 문제
+
+**해결:**
+```javascript
+// ✅ 안전한 로드 패턴
+load() {
+  try {
+    const data = localStorage.getItem('djjc_save');
+    if (!data) return this.getDefaultState();
+
+    const parsed = JSON.parse(data);
+
+    // 스키마 버전 체크
+    if (parsed.version !== CURRENT_VERSION) {
+      return this.migrate(parsed);
+    }
+
+    return parsed;
+  } catch (e) {
+    console.error('Save data corrupted, resetting...');
+    return this.getDefaultState();
+  }
+}
+```
+
+**파훼법:**
+- 저장 데이터에 `version` 필드 포함
+- 스키마 변경 시 마이그레이션 함수 작성
+
+---
+
+## 6. 좌표/크기 관련
+
+### 문제: 반응형 스케일링 후 터치 좌표가 어긋남
+**증상:** 버튼 클릭 위치가 실제 버튼과 다름
+
+**원인:**
+- CSS transform scale과 canvas 내부 좌표 불일치
+- devicePixelRatio 미적용
+
+**해결:**
+```javascript
+// ✅ Phaser 사용 시 자동 처리됨 (scale.mode: FIT)
+
+// ✅ Vanilla Canvas 사용 시
+getCanvasCoords(e) {
+  const rect = this.canvas.getBoundingClientRect();
+  const scaleX = this.canvas.width / rect.width;
+  const scaleY = this.canvas.height / rect.height;
+
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY
+  };
+}
+```
+
+---
+
+## 7. 비동기/타이밍 관련
+
+### 문제: 에셋 로딩 전에 게임이 시작됨
+**증상:** 이미지/사운드가 undefined이거나 로드 안 됨
+
+**해결:**
+```javascript
+// ✅ Phaser BootScene 패턴
+preload() {
+  this.load.image('cookie', 'assets/cookie.png');
+}
+
+create() {
+  // preload 완료 후 실행됨
+  this.scene.start('CounterScene');
+}
+
+// ✅ Vanilla Canvas 패턴
+async init() {
+  await this.assetManager.loadAll();
+  this.start(); // 로딩 완료 후
+}
+```
+
+---
+
+## 8. 메모리 누수
+
+### 문제: 오래 플레이하면 게임이 느려짐
+**증상:** 프레임 드랍, 메모리 사용량 증가
+
+**원인:**
+- 파티클/이펙트 destroy 안 함
+- 이벤트 리스너 누적
+- 사용하지 않는 텍스처 메모리에 남음
+
+**해결:**
+```javascript
+// ✅ 파티클 자동 제거
+particle.on('complete', () => particle.destroy());
+
+// ✅ Phaser에서 텍스처 정리
+this.textures.remove('temp-texture');
+
+// ✅ Scene 종료 시 정리
+shutdown() {
+  this.children.each(child => child.destroy());
+}
+```
+
+**파훼법:** Chrome DevTools의 Memory 탭으로 주기적 체크
+
+---
+
+## 빠른 참조 체크리스트
+
+### 새 State/Scene 만들 때
+- [ ] `enter()`/`create()`에서 초기화
+- [ ] `exit()`/`shutdown()`에서 cleanup
+- [ ] 이벤트 리스너 대칭 (on ↔ off)
+- [ ] 타이머/Tween 정리
+
+### 터치 입력 구현 시
+- [ ] Phaser `input.on('pointer*')` 사용
+- [ ] 또는 터치/마우스 분기 처리
+- [ ] 좌표 변환 확인
+
+### 저장/로드 구현 시
+- [ ] try-catch로 JSON.parse 감싸기
+- [ ] version 필드 포함
+- [ ] 기본값 fallback
+
+### 성능 이슈 발생 시
+1. Chrome DevTools Performance 탭
+2. Memory 탭에서 힙 스냅샷
+3. 파티클/이펙트 destroy 확인
+4. 이벤트 리스너 누적 확인

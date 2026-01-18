@@ -17,9 +17,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev      # 개발 서버 실행 (http://localhost:3000)
+npm run dev      # 개발 서버 실행 (Vite)
 npm run build    # 프로덕션 빌드
 npm run preview  # 빌드 결과 미리보기
+npm run test     # Vitest 테스트 실행
 ```
 
 ## Project Overview
@@ -30,6 +31,10 @@ npm run preview  # 빌드 결과 미리보기
 
 ## Architecture
 
+프로젝트는 두 가지 아키텍처를 병행:
+
+### 1. Vanilla Canvas 엔진 (src/)
+
 ```
 src/
 ├── main.js              # 엔트리 포인트
@@ -37,30 +42,36 @@ src/
 │   ├── Game.js          # 메인 게임 클래스 (루프, 렌더링)
 │   ├── StateManager.js  # 상태 머신
 │   ├── InputManager.js  # 터치/마우스 입력
-│   ├── AssetManager.js  # 이미지/사운드 로드
-│   ├── AudioManager.js  # BGM/SFX 관리
 │   ├── SoundManager.js  # Web Audio API 프로시저럴 사운드
-│   ├── ParticleSystem.js # 파티클 이펙트 시스템
-│   ├── RecipeManager.js # 레시피 관리 시스템
-│   ├── InventoryManager.js # 쿠키 재고 관리
-│   └── ShopUpgradeManager.js # 가게 업그레이드 시스템
-├── states/              # 게임 상태들
-│   ├── BaseState.js     # 상태 기본 클래스
-│   ├── TitleState.js    # 타이틀 화면
-│   ├── IntroState.js    # 인트로 컷신
-│   ├── TutorialState.js # 튜토리얼
-│   ├── ShopState.js     # 가게 허브 (메인 화면)
-│   ├── PrepState.js     # 재료준비 (미니게임 3종)
-│   ├── BakingState.js   # 베이킹 (반죽 성형)
-│   ├── DecoState.js     # 데코레이션
-│   ├── TastingState.js  # 품평회
-│   ├── SellState.js     # 판매 (두쫀코스피)
-│   └── RecipeBookState.js # 레시피북
-├── utils/
-│   └── Storage.js       # localStorage 래퍼
-└── styles/
-    └── main.css         # 스타일시트
+│   └── TimeManager.js   # 에너지/시간대/요일 시스템
+├── states/              # 게임 상태 (TitleState, ShopState, PrepState 등)
+└── utils/Storage.js     # localStorage 래퍼
 ```
+
+### 2. Phaser.js 엔진 (src/phaser/) - v2.0.0
+
+```
+src/phaser/
+├── main.js              # Phaser 엔트리 (window.debug 헬퍼 포함)
+├── config/GameConfig.js # 게임 설정, 색상, 폰트, 유틸리티
+├── managers/
+│   ├── GameManager.js   # 싱글톤 상태 관리 (골드, 인벤토리, 통계)
+│   ├── EventEmitter.js  # 이벤트 시스템
+│   └── EffectsManager.js
+├── scenes/
+│   ├── BootScene.js     # 초기화/로딩
+│   ├── CounterScene.js  # 카운터 (손님 응대)
+│   ├── KitchenScene.js  # 주방 (쿠키 제작)
+│   ├── UIScene.js       # UI 오버레이
+│   └── minigames/       # 미니게임 4종
+│       ├── KadaifSliceScene.js
+│       ├── PistachioCrushScene.js
+│       ├── MarshmallowMeltScene.js
+│       └── CocoaHelixScene.js
+└── prefabs/             # 게임 오브젝트 (Customer, Ingredient, Cookie)
+```
+
+**Phaser Scene 흐름:** `BootScene → CounterScene ↔ KitchenScene (UIScene 오버레이)`
 
 ## Core Game Flow
 
@@ -102,7 +113,31 @@ src/
 
 ## Technical Notes
 
-- **Canvas**: 외부 라이브러리 없이 순수 Canvas API 사용
-- **터치**: touchstart/move/end 이벤트 기반
-- **저장**: localStorage (djjc_save, djjc_recipes)
-- **해상도**: 390x844 (모바일 기준), 반응형 스케일링
+- **Phaser 3.80.1**: 메인 게임 엔진 (v2.0.0)
+- **Vanilla Canvas**: 레거시 시스템 (src/)
+- **저장**: localStorage (djjc_save, djjc_recipes, djjc_time)
+- **해상도**: 720x1280 (Phaser), 반응형 스케일링
+- **픽셀 아트**: `pixelArt: true`, `roundPixels: true`
+- **폰트**: DungGeunMo, Galmuri11 (GameConfig.js에서 FONTS 참조)
+
+## Debug (개발 모드)
+
+브라우저 콘솔에서 `window.debug` 사용:
+```js
+debug.addGold(1000)       // 골드 추가
+debug.fillIngredients()   // 모든 재료 100개
+debug.nextDay()           // 다음 날로
+debug.status()            // 상태 출력
+debug.reset()             // 리셋
+```
+
+## 🚨 반복되는 실수 방지
+
+**`progress.md` 하단의 "반복되는 실수 & 버그 해결 가이드" 섹션 필독!**
+
+주요 함정:
+1. **터치 이벤트**: `touchstart` + `mousedown` 중복 → Phaser `pointerdown` 사용
+2. **State cleanup**: `exit()`에서 타이머/리스너 반드시 정리
+3. **iOS 오디오**: 첫 터치에서 `AudioContext.resume()` 필요
+4. **좌표 변환**: canvas 스케일링 시 `getBoundingClientRect()` 사용
+5. **저장 데이터**: `JSON.parse`는 항상 try-catch로 감싸기
