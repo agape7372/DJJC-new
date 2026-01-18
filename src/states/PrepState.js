@@ -1302,7 +1302,7 @@ export class PrepState extends BaseState {
     ctx.font = '12px DungGeunMo, sans-serif';
     ctx.fillStyle = '#888';
     ctx.textAlign = 'center';
-    ctx.fillText('FEVER 게이지', this.config.width / 2, gaugeY - 8);
+    ctx.fillText('피버 게이지', this.config.width / 2, gaugeY - 8);
 
     // 배경
     ctx.fillStyle = '#222';

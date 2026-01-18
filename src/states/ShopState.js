@@ -49,11 +49,11 @@ const CustomerType = {
 };
 
 const CustomerInfo = {
-  [CustomerType.STUDENT]: { name: 'Student', patience: 1.0, tipMultiplier: 0.8, orderQuantity: [1, 2], color: '#4A90D9' },
-  [CustomerType.HIPSTER]: { name: 'Hipster', patience: 0.7, tipMultiplier: 1.2, orderQuantity: [1, 1], color: '#9B59B6' },
-  [CustomerType.TOURIST]: { name: 'Tourist', patience: 0.9, tipMultiplier: 2.0, orderQuantity: [2, 4], color: '#F1C40F' },
-  [CustomerType.GRANDMA]: { name: 'Grandma', patience: 1.5, tipMultiplier: 1.0, orderQuantity: [1, 3], color: '#E67E22' },
-  [CustomerType.BUSINESSMAN]: { name: 'Business', patience: 0.5, tipMultiplier: 1.5, orderQuantity: [1, 2], color: '#34495E' }
+  [CustomerType.STUDENT]: { name: '학생', patience: 1.0, tipMultiplier: 0.8, orderQuantity: [1, 2], color: '#4A90D9' },
+  [CustomerType.HIPSTER]: { name: '힙스터', patience: 0.7, tipMultiplier: 1.2, orderQuantity: [1, 1], color: '#9B59B6' },
+  [CustomerType.TOURIST]: { name: '관광객', patience: 0.9, tipMultiplier: 2.0, orderQuantity: [2, 4], color: '#F1C40F' },
+  [CustomerType.GRANDMA]: { name: '할머니', patience: 1.5, tipMultiplier: 1.0, orderQuantity: [1, 3], color: '#E67E22' },
+  [CustomerType.BUSINESSMAN]: { name: '직장인', patience: 0.5, tipMultiplier: 1.5, orderQuantity: [1, 2], color: '#34495E' }
 };
 
 const IngredientType = {
@@ -64,10 +64,10 @@ const IngredientType = {
 };
 
 const IngredientInfo = {
-  [IngredientType.KADAIF]: { name: 'Kadaif', color: '#D4A574', points: 25 },
-  [IngredientType.PISTACHIO]: { name: 'Pistachio', color: '#7CB342', points: 25 },
-  [IngredientType.MARSHMALLOW]: { name: 'Mallow', color: '#FFEFD5', points: 25 },
-  [IngredientType.COCOA]: { name: 'Cocoa', color: '#5D4037', points: 25 }
+  [IngredientType.KADAIF]: { name: '카다이프', color: '#D4A574', points: 25 },
+  [IngredientType.PISTACHIO]: { name: '피스타치오', color: '#7CB342', points: 25 },
+  [IngredientType.MARSHMALLOW]: { name: '마시멜로', color: '#FFEFD5', points: 25 },
+  [IngredientType.COCOA]: { name: '코코아', color: '#5D4037', points: 25 }
 };
 
 const TIME_COLORS = {
@@ -341,7 +341,7 @@ export class ShopState extends BaseState {
   _handleAcceptOrder() {
     if (!this.currentCustomer) return;
     if (this.pendingOrders.length >= this.maxOrders) { this.showToast('Order queue full!', 'warning'); return; }
-    if (!timeManager.canPerformActivity('MAKE_COOKIE')) { this.showToast('No energy!', 'error'); soundManager.playBuzzer(); return; }
+    if (!timeManager.canPerformActivity('MAKE_COOKIE')) { this.showToast('에너지 부족!', 'error'); soundManager.playBuzzer(); return; }
     const order = {
       customer: this.currentCustomer,
       recipe: this.currentCustomer.order.recipe,
@@ -390,7 +390,7 @@ export class ShopState extends BaseState {
   _handleBakeCookie() {
     if (this.workArea.progress < 100) { this.showToast('Add more ingredients!', 'warning'); return; }
     if (this.selectedOrder === null || this.selectedOrder >= this.pendingOrders.length) { this.showToast('Select an order!', 'warning'); return; }
-    if (!timeManager.canPerformActivity('MAKE_COOKIE')) { this.showToast('No energy!', 'error'); soundManager.playBuzzer(); return; }
+    if (!timeManager.canPerformActivity('MAKE_COOKIE')) { this.showToast('에너지 부족!', 'error'); soundManager.playBuzzer(); return; }
     timeManager.performActivity('MAKE_COOKIE');
     soundManager.playEnergyDrain();
     const order = this.pendingOrders[this.selectedOrder];
@@ -426,7 +426,7 @@ export class ShopState extends BaseState {
   handleBuyUpgrade(id) {
     const upgrade = UPGRADES[id];
     if (!upgrade) return;
-    if (!timeManager.canPerformActivity('UPGRADE_SHOP')) { this.showToast('No energy!', 'error'); soundManager.playBuzzer(); return; }
+    if (!timeManager.canPerformActivity('UPGRADE_SHOP')) { this.showToast('에너지 부족!', 'error'); soundManager.playBuzzer(); return; }
     const result = shopUpgradeManager.canPurchase(id, this.game.money);
     if (!result.canBuy) { this.showToast(result.reason, 'error'); soundManager.playBuzzer(); return; }
     this.game.money -= upgrade.price;
@@ -531,12 +531,12 @@ export class ShopState extends BaseState {
   renderHeader(ctx, status, tc) {
     this.drawPixelBox(ctx, 0, 0, this.config.width, 115, { fill: COLORS.primary, borderWidth: 4, shadow: false });
     this.drawPixelBox(ctx, 8, 8, this.config.width - 16, 99, { fill: COLORS.panelBg, borderWidth: 2, shadow: false });
-    this.drawText(ctx, `DAY ${status.day}`, 20, 28, { font: PIXEL_FONT.large, color: COLORS.text });
+    this.drawText(ctx, `${status.day}일차`, 20, 28, { font: PIXEL_FONT.large, color: COLORS.text });
     this.drawText(ctx, `[${status.dayNameShort}]`, 100, 28, { font: PIXEL_FONT.small, color: COLORS.secondary });
     const tl = status.timePeriod === TimePeriod.NIGHT ? 'NIGHT' : status.timePeriod === TimePeriod.EVENING ? 'EVE' : status.timePeriod === TimePeriod.AFTERNOON ? 'NOON' : 'AM';
     this.drawText(ctx, `< ${tl} >`, this.config.width - 20, 28, { font: PIXEL_FONT.large, color: tc.primary, align: 'right' });
     this.renderEnergyBar(ctx, status);
-    this.drawText(ctx, 'DUBAI COOKIE', this.config.width / 2, 92, { font: PIXEL_FONT.title, color: COLORS.text, align: 'center' });
+    this.drawText(ctx, '두쫀쿠 베이커리', this.config.width / 2, 92, { font: PIXEL_FONT.title, color: COLORS.text, align: 'center' });
     this.drawPixelIcon(ctx, 'money', this.config.width - 100, 92, 16);
     this.drawText(ctx, `${(this.game.money || 0).toLocaleString()}G`, this.config.width - 20, 92, { font: PIXEL_FONT.normal, color: COLORS.accent, align: 'right' });
     this.renderMiniButtons(ctx);
@@ -556,7 +556,7 @@ export class ShopState extends BaseState {
       ctx.strokeStyle = COLORS.border; ctx.lineWidth = 1; ctx.strokeRect(mx - 8, my, 16, 8);
       if (active) { ctx.fillStyle = COLORS.text; ctx.beginPath(); ctx.moveTo(mx, my - 3); ctx.lineTo(mx - 4, my); ctx.lineTo(mx + 4, my); ctx.closePath(); ctx.fill(); }
     }
-    this.drawText(ctx, `POWER: ${status.energy}/${status.maxEnergy}`, bx + bw / 2, by + bh / 2, { font: PIXEL_FONT.small, color: COLORS.textBright, align: 'center', baseline: 'middle' });
+    this.drawText(ctx, `에너지: ${status.energy}/${status.maxEnergy}`, bx + bw / 2, by + bh / 2, { font: PIXEL_FONT.small, color: COLORS.textBright, align: 'center', baseline: 'middle' });
   }
 
   renderMiniButtons(ctx) {
@@ -591,7 +591,7 @@ export class ShopState extends BaseState {
       this.drawText(ctx, info.name, cx, cy + 61, { font: PIXEL_FONT.small, color: COLORS.textBright, align: 'center', baseline: 'middle' });
     } else {
       const dots = '.'.repeat(Math.floor(this.animTime * 2) % 4);
-      this.drawText(ctx, `Waiting${dots}`, cx, cy + 20, { font: PIXEL_FONT.normal, color: COLORS.textLight, align: 'center' });
+      this.drawText(ctx, `손님 대기중${dots}`, cx, cy + 20, { font: PIXEL_FONT.normal, color: COLORS.textLight, align: 'center' });
     }
   }
 
@@ -604,7 +604,7 @@ export class ShopState extends BaseState {
     ctx.strokeStyle = COLORS.border; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(this.config.width / 2 - 15, by); ctx.lineTo(this.config.width / 2, by - 20); ctx.lineTo(this.config.width / 2 + 15, by); ctx.stroke();
     const o = this.currentCustomer.order;
-    this.drawText(ctx, 'ORDER:', bx + 15, by + 25, { font: PIXEL_FONT.small, color: COLORS.textLight });
+    this.drawText(ctx, '주문:', bx + 15, by + 25, { font: PIXEL_FONT.small, color: COLORS.textLight });
     this.drawText(ctx, o.recipe.name, bx + 15, by + 50, { font: PIXEL_FONT.large, color: COLORS.text });
     this.drawText(ctx, `x ${o.quantity}`, bx + bw - 20, by + 50, { font: PIXEL_FONT.title, color: COLORS.accent, align: 'right' });
     this.drawPixelIcon(ctx, 'cookie', bx + bw - 70, by + 45, 24);
@@ -614,12 +614,12 @@ export class ShopState extends BaseState {
     const by = 500, bw = 140, bh = 55, gap = 30;
     const ax = this.config.width / 2 - bw - gap / 2;
     this.drawPixelBox(ctx, ax, by, bw, bh, { fill: COLORS.success, borderWidth: 3, shadow: true });
-    this.drawText(ctx, 'ACCEPT', ax + bw / 2, by + 20, { font: PIXEL_FONT.large, color: COLORS.textBright, align: 'center' });
+    this.drawText(ctx, '수락', ax + bw / 2, by + 20, { font: PIXEL_FONT.large, color: COLORS.textBright, align: 'center' });
     this.drawText(ctx, 'V', ax + bw / 2, by + 42, { font: PIXEL_FONT.title, color: COLORS.textBright, align: 'center' });
     this.buttons.push({ x: ax, y: by, width: bw, height: bh, action: 'accept_order' });
     const rx = this.config.width / 2 + gap / 2;
     this.drawPixelBox(ctx, rx, by, bw, bh, { fill: COLORS.danger, borderWidth: 3, shadow: true });
-    this.drawText(ctx, 'REJECT', rx + bw / 2, by + 20, { font: PIXEL_FONT.large, color: COLORS.textBright, align: 'center' });
+    this.drawText(ctx, '거절', rx + bw / 2, by + 20, { font: PIXEL_FONT.large, color: COLORS.textBright, align: 'center' });
     this.drawText(ctx, 'X', rx + bw / 2, by + 42, { font: PIXEL_FONT.title, color: COLORS.textBright, align: 'center' });
     this.buttons.push({ x: rx, y: by, width: bw, height: bh, action: 'reject_order' });
   }
@@ -627,7 +627,7 @@ export class ShopState extends BaseState {
   renderPendingOrdersPreview(ctx) {
     const py = 580, ss = 50, gap = 10;
     const sx = (this.config.width - (ss * this.maxOrders + gap * (this.maxOrders - 1))) / 2;
-    this.drawText(ctx, 'PENDING ORDERS', this.config.width / 2, py - 15, { font: PIXEL_FONT.small, color: COLORS.textLight, align: 'center' });
+    this.drawText(ctx, '대기 주문', this.config.width / 2, py - 15, { font: PIXEL_FONT.small, color: COLORS.textLight, align: 'center' });
     for (let i = 0; i < this.maxOrders; i++) {
       const x = sx + i * (ss + gap), has = i < this.pendingOrders.length;
       ctx.fillStyle = has ? COLORS.accent : 'rgba(0,0,0,0.2)'; ctx.fillRect(x, py, ss, ss);
@@ -662,7 +662,7 @@ export class ShopState extends BaseState {
   renderOrderSlots(ctx) {
     const sy = 210, ss = 70, gap = 12;
     const sx = (this.config.width - (ss * this.maxOrders + gap * (this.maxOrders - 1))) / 2;
-    this.drawText(ctx, '[ ORDERS ]', this.config.width / 2, sy - 20, { font: PIXEL_FONT.normal, color: COLORS.text, align: 'center' });
+    this.drawText(ctx, '[ 주문 목록 ]', this.config.width / 2, sy - 20, { font: PIXEL_FONT.normal, color: COLORS.text, align: 'center' });
     for (let i = 0; i < this.maxOrders; i++) {
       const x = sx + i * (ss + gap), has = i < this.pendingOrders.length, sel = this.selectedOrder === i;
       this.drawPixelBox(ctx, x, sy, ss, ss, { fill: sel ? COLORS.accent : has ? COLORS.cardBg : 'rgba(0,0,0,0.1)', borderWidth: sel ? 3 : 2, shadow: has });
@@ -677,7 +677,7 @@ export class ShopState extends BaseState {
 
   renderIngredientStations(ctx) {
     const stations = this._getIngredientStations();
-    this.drawText(ctx, '[ INGREDIENTS ]', this.config.width / 2, 360, { font: PIXEL_FONT.normal, color: COLORS.text, align: 'center' });
+    this.drawText(ctx, '[ 재료 ]', this.config.width / 2, 360, { font: PIXEL_FONT.normal, color: COLORS.text, align: 'center' });
     stations.forEach(s => {
       const info = IngredientInfo[s.type];
       this.drawPixelBox(ctx, s.x, s.y, s.width, s.height, { fill: info.color, borderWidth: 3, shadow: true });
@@ -688,7 +688,7 @@ export class ShopState extends BaseState {
 
   renderWorkArea(ctx) {
     const ax = 60, ay = 490, aw = this.config.width - 120, ah = 140;
-    this.drawText(ctx, '[ WORK AREA ]', this.config.width / 2, ay - 15, { font: PIXEL_FONT.normal, color: COLORS.text, align: 'center' });
+    this.drawText(ctx, '[ 작업대 ]', this.config.width / 2, ay - 15, { font: PIXEL_FONT.normal, color: COLORS.text, align: 'center' });
     this.drawPixelBox(ctx, ax, ay, aw, ah, { fill: '#C4B4A0', borderWidth: 3, shadow: false });
     const bx = ax + 15, by = ay + 15, bw = aw - 30, bh = 25;
     this.drawPixelProgressBar(ctx, bx, by, bw, bh, this.workArea.progress / 100, { bgColor: '#8B7B6B', fillColor: COLORS.success, segments: 10 });
@@ -709,7 +709,7 @@ export class ShopState extends BaseState {
       const cx = ax + aw - 70, cy = iy;
       ctx.fillStyle = COLORS.danger; ctx.fillRect(cx, cy, 55, is);
       ctx.strokeStyle = COLORS.border; ctx.lineWidth = 2; ctx.strokeRect(cx, cy, 55, is);
-      this.drawText(ctx, 'CLR', cx + 27, cy + is / 2, { font: PIXEL_FONT.small, color: COLORS.textBright, align: 'center', baseline: 'middle' });
+      this.drawText(ctx, '지움', cx + 27, cy + is / 2, { font: PIXEL_FONT.small, color: COLORS.textBright, align: 'center', baseline: 'middle' });
       this.buttons.push({ x: cx, y: cy, width: 55, height: is, action: 'clear_workarea' });
     }
   }
@@ -720,11 +720,11 @@ export class ShopState extends BaseState {
     ctx.fillStyle = this.workArea.progress >= 100 ? '#FF6B35' : '#2A2A2A';
     ctx.fillRect(ox + 15, oy + 15, ow - 30, oh - 40);
     ctx.strokeStyle = COLORS.border; ctx.lineWidth = 2; ctx.strokeRect(ox + 15, oy + 15, ow - 30, oh - 40);
-    this.drawText(ctx, 'OVEN', ox + ow / 2, oy + oh - 10, { font: PIXEL_FONT.tiny, color: COLORS.textBright, align: 'center' });
+    this.drawText(ctx, '오븐', ox + ow / 2, oy + oh - 10, { font: PIXEL_FONT.tiny, color: COLORS.textBright, align: 'center' });
     const bx = 140, bw = this.config.width - 170, canBake = this.workArea.progress >= 100 && this.selectedOrder !== null;
     this.drawPixelBox(ctx, bx, oy, bw, oh, { fill: canBake ? COLORS.success : COLORS.disabled, borderWidth: 3, shadow: canBake });
-    this.drawText(ctx, 'BAKE COOKIE', bx + bw / 2, oy + 25, { font: PIXEL_FONT.large, color: COLORS.textBright, align: 'center' });
-    this.drawText(ctx, canBake ? 'Ready!' : 'Add & Select', bx + bw / 2, oy + 50, { font: PIXEL_FONT.small, color: canBake ? COLORS.textBright : 'rgba(255,255,255,0.5)', align: 'center' });
+    this.drawText(ctx, '쿠키 굽기', bx + bw / 2, oy + 25, { font: PIXEL_FONT.large, color: COLORS.textBright, align: 'center' });
+    this.drawText(ctx, canBake ? '준비 완료!' : '재료 추가', bx + bw / 2, oy + 50, { font: PIXEL_FONT.small, color: canBake ? COLORS.textBright : 'rgba(255,255,255,0.5)', align: 'center' });
     if (canBake) this.buttons.push({ x: bx, y: oy, width: bw, height: oh, action: 'bake_cookie' });
   }
 
@@ -732,7 +732,7 @@ export class ShopState extends BaseState {
     const by = this.config.height - 60, bw = 180, bh = 45, bx = (this.config.width - bw) / 2;
     const toK = target === 'kitchen';
     this.drawPixelBox(ctx, bx, by, bw, bh, { fill: COLORS.secondary, borderWidth: 3, shadow: true });
-    this.drawText(ctx, toK ? '>> KITCHEN >>' : '<< COUNTER <<', bx + bw / 2, by + bh / 2, { font: PIXEL_FONT.normal, color: COLORS.textBright, align: 'center', baseline: 'middle' });
+    this.drawText(ctx, toK ? '>> 주방 >>' : '<< 카운터 <<', bx + bw / 2, by + bh / 2, { font: PIXEL_FONT.normal, color: COLORS.textBright, align: 'center', baseline: 'middle' });
     this.buttons.push({ x: bx, y: by, width: bw, height: bh, action: toK ? 'goto_kitchen' : 'goto_counter' });
   }
 
@@ -764,12 +764,12 @@ export class ShopState extends BaseState {
   }
 
   renderMarketModal(ctx, mx, my, mw, mh) {
-    this.drawText(ctx, '[ MARKET ]', mx + mw / 2, my + 30, { font: PIXEL_FONT.title, color: COLORS.primary, align: 'center' });
+    this.drawText(ctx, '[ 시세 ]', mx + mw / 2, my + 30, { font: PIXEL_FONT.title, color: COLORS.primary, align: 'center' });
     const isUp = this.currentPrice >= this.basePrice;
     const pc = isUp ? '#e74c3c' : '#3498db';
     const chg = ((this.currentPrice - this.basePrice) / this.basePrice * 100);
     this.drawText(ctx, `${Math.floor(this.currentPrice).toLocaleString()}G`, mx + mw / 2, my + 90, { font: 'bold 28px DungGeunMo, monospace', color: pc, align: 'center' });
-    this.drawText(ctx, `${isUp ? 'UP' : 'DN'} ${Math.abs(chg).toFixed(1)}%`, mx + mw / 2, my + 120, { font: PIXEL_FONT.normal, color: pc, align: 'center' });
+    this.drawText(ctx, `${isUp ? '▲' : '▼'} ${Math.abs(chg).toFixed(1)}%`, mx + mw / 2, my + 120, { font: PIXEL_FONT.normal, color: pc, align: 'center' });
     ctx.fillStyle = '#1a1a2e'; ctx.fillRect(mx + 15, my + 150, mw - 30, 150);
     if (this.priceHistory.length > 1) {
       const min = Math.min(...this.priceHistory) * 0.95, max = Math.max(...this.priceHistory) * 1.05, range = max - min || 1;
@@ -788,7 +788,7 @@ export class ShopState extends BaseState {
   }
 
   renderCalendarModal(ctx, mx, my, mw, mh, status) {
-    this.drawText(ctx, '[ CALENDAR ]', mx + mw / 2, my + 30, { font: PIXEL_FONT.title, color: COLORS.primary, align: 'center' });
+    this.drawText(ctx, '[ 캘린더 ]', mx + mw / 2, my + 30, { font: PIXEL_FONT.title, color: COLORS.primary, align: 'center' });
     const cal = timeManager.getWeekCalendar(), cw = (mw - 30) / 7, ch = 90, cy = my + 60;
     cal.forEach((d, i) => {
       const x = mx + 15 + i * cw, today = d.isToday, past = d.isPast;
@@ -801,9 +801,9 @@ export class ShopState extends BaseState {
   }
 
   renderInventoryModal(ctx, mx, my, mw, mh) {
-    this.drawText(ctx, '[ INVENTORY ]', mx + mw / 2, my + 30, { font: PIXEL_FONT.title, color: COLORS.primary, align: 'center' });
+    this.drawText(ctx, '[ 재고 ]', mx + mw / 2, my + 30, { font: PIXEL_FONT.title, color: COLORS.primary, align: 'center' });
     const cookies = inventoryManager.cookies, sy = my + 60 - this.scrollY;
-    if (cookies.length === 0) { this.drawText(ctx, 'No cookies', mx + mw / 2, my + 150, { font: PIXEL_FONT.normal, color: COLORS.textLight, align: 'center' }); return; }
+    if (cookies.length === 0) { this.drawText(ctx, '쿠키 없음', mx + mw / 2, my + 150, { font: PIXEL_FONT.normal, color: COLORS.textLight, align: 'center' }); return; }
     cookies.forEach((c, i) => {
       const cy = sy + i * 80;
       if (cy < my + 50 || cy > my + mh - 20) return;
@@ -817,7 +817,7 @@ export class ShopState extends BaseState {
   }
 
   renderUpgradeModal(ctx, mx, my, mw, mh) {
-    this.drawText(ctx, '[ UPGRADE ]', mx + mw / 2, my + 30, { font: PIXEL_FONT.title, color: COLORS.primary, align: 'center' });
+    this.drawText(ctx, '[ 업그레이드 ]', mx + mw / 2, my + 30, { font: PIXEL_FONT.title, color: COLORS.primary, align: 'center' });
     const tabs = [{ id: UpgradeTab.EQUIPMENT, l: 'EQUIP', a: 'upgrade_equipment' }, { id: UpgradeTab.INTERIOR, l: 'DECOR', a: 'upgrade_interior' }, { id: UpgradeTab.INGREDIENT, l: 'INGRE', a: 'upgrade_ingredient' }];
     const tw = (mw - 40) / 3, ty = my + 50;
     tabs.forEach((t, i) => {
@@ -838,14 +838,14 @@ export class ShopState extends BaseState {
       this.drawText(ctx, u.name, mx + 25, cy + 18, { font: PIXEL_FONT.normal, color: COLORS.text });
       this.drawText(ctx, u.description, mx + 25, cy + 38, { font: PIXEL_FONT.tiny, color: COLORS.textLight });
       if (bought) {
-        this.drawText(ctx, '[OWNED]', mx + mw - 35, cy + 35, { font: PIXEL_FONT.small, color: COLORS.success, align: 'right' });
+        this.drawText(ctx, '[보유]', mx + mw - 35, cy + 35, { font: PIXEL_FONT.small, color: COLORS.success, align: 'right' });
       } else {
         this.drawText(ctx, `${u.price.toLocaleString()}G`, mx + mw - 35, cy + 20, { font: PIXEL_FONT.normal, color: can.canBuy ? COLORS.success : COLORS.danger, align: 'right' });
         if (can.canBuy) {
           const bx = mx + mw - 80, by = cy + 45;
           ctx.fillStyle = COLORS.success; ctx.fillRect(bx, by, 55, 22);
           ctx.strokeStyle = COLORS.border; ctx.lineWidth = 1; ctx.strokeRect(bx, by, 55, 22);
-          this.drawText(ctx, 'BUY', bx + 27, by + 11, { font: PIXEL_FONT.small, color: COLORS.textBright, align: 'center', baseline: 'middle' });
+          this.drawText(ctx, '구매', bx + 27, by + 11, { font: PIXEL_FONT.small, color: COLORS.textBright, align: 'center', baseline: 'middle' });
           this.buttons.push({ x: bx, y: by, width: 55, height: 22, action: 'buy_upgrade', upgradeId: u.id });
         }
       }
@@ -912,8 +912,8 @@ export class ShopState extends BaseState {
     ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, 0, this.config.width, this.config.height);
     const mw = this.config.width - 60, mh = 350, mx = 30, my = (this.config.height - mh) / 2;
     this.drawPixelBox(ctx, mx, my, mw, mh, { fill: COLORS.cardBg, borderWidth: 4, shadow: true });
-    this.drawText(ctx, '[ DAY END ]', mx + mw / 2, my + 35, { font: PIXEL_FONT.title, color: COLORS.primary, align: 'center' });
-    this.drawText(ctx, `DAY ${status.day} - ${status.dayName}`, mx + mw / 2, my + 60, { font: PIXEL_FONT.small, color: COLORS.textLight, align: 'center' });
+    this.drawText(ctx, '[ 하루 종료 ]', mx + mw / 2, my + 35, { font: PIXEL_FONT.title, color: COLORS.primary, align: 'center' });
+    this.drawText(ctx, `${status.day}일차 - ${status.dayName}`, mx + mw / 2, my + 60, { font: PIXEL_FONT.small, color: COLORS.textLight, align: 'center' });
     ctx.fillStyle = COLORS.border; ctx.fillRect(mx + 20, my + 78, mw - 40, 3);
     const sum = this.dayEndSummary || timeManager.dailySummary;
     const stats = [
@@ -930,7 +930,7 @@ export class ShopState extends BaseState {
     });
     const bw = 160, bh = 50, bx = mx + (mw - bw) / 2, by = my + mh - 70;
     this.drawPixelBox(ctx, bx, by, bw, bh, { fill: COLORS.success, borderWidth: 3, shadow: true });
-    this.drawText(ctx, '>> NEXT DAY >>', bx + bw / 2, by + bh / 2, { font: PIXEL_FONT.large, color: COLORS.textBright, align: 'center', baseline: 'middle' });
+    this.drawText(ctx, '>> 다음 날 >>', bx + bw / 2, by + bh / 2, { font: PIXEL_FONT.large, color: COLORS.textBright, align: 'center', baseline: 'middle' });
   }
 
   drawPixelBox(ctx, x, y, w, h, o = {}) {

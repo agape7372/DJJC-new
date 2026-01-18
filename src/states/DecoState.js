@@ -746,7 +746,7 @@ export class DecoState extends BaseState {
     ctx.font = 'bold 20px DungGeunMo, sans-serif';
     ctx.fillStyle = '#e91e63';
     ctx.textAlign = 'center';
-    ctx.fillText('STEP 5', this.config.width / 2, this.config.height * 0.35);
+    ctx.fillText('단계 5', this.config.width / 2, this.config.height * 0.35);
 
     // 제목
     ctx.font = 'bold 36px DungGeunMo, sans-serif';
