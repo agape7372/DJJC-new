@@ -1979,6 +1979,41 @@ this.events.on('shutdown', () => {
 
 ---
 
+### 문제: 미니게임 종료 후 화면이 검게 멈춤 ⭐ NEW
+**증상:** 미니게임(KadaifSlice 등) 완료 후 "계속하기" 버튼 클릭 시 검은 화면
+
+**원인:**
+- KitchenScene에서 미니게임 시작 전 `cameras.main.fadeOut()` 호출
+- 미니게임 종료 시 `scene.resume()` + `scene.stop()` 동시 호출
+- KitchenScene의 카메라가 fadeOut 상태로 유지됨
+
+**해결:**
+```javascript
+// ❌ 잘못된 방법
+this.scene.resume('KitchenScene');
+this.scene.stop(); // 즉시 stop하면 카메라 상태 복구 안 됨
+
+// ✅ 올바른 방법
+// 1. 먼저 resume
+this.scene.resume('KitchenScene');
+
+// 2. 카메라 강제 fadeIn
+const kitchenScene = this.scene.get('KitchenScene');
+if (kitchenScene?.cameras?.main) {
+  kitchenScene.cameras.main.fadeIn(300);
+}
+
+// 3. 콜백 호출
+if (this.onComplete) this.onComplete(score, combo);
+
+// 4. 딜레이 후 stop
+this.time.delayedCall(50, () => this.scene.stop());
+```
+
+**파훼법:** Scene 전환 시 항상 카메라 상태 확인 & 강제 fadeIn
+
+---
+
 ### 문제: Phaser에서 한글 폰트가 깨짐
 **증상:** 텍스트가 네모(□)로 표시되거나 폰트가 적용 안 됨
 

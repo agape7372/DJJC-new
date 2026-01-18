@@ -1031,11 +1031,26 @@ export class KadaifSliceScene extends Phaser.Scene {
 
     continueBtn.on('pointerdown', () => {
       soundManager.playUIClick();
+
+      // [Fix] Scene 전환 순서 수정 - 검은 화면 버그 해결
+      // 1. 먼저 KitchenScene resume
+      this.scene.resume('KitchenScene');
+
+      // 2. KitchenScene 카메라 강제 fadeIn (fadeOut 상태일 수 있음)
+      const kitchenScene = this.scene.get('KitchenScene');
+      if (kitchenScene && kitchenScene.cameras && kitchenScene.cameras.main) {
+        kitchenScene.cameras.main.fadeIn(300);
+      }
+
+      // 3. onComplete 콜백 호출 (UI 업데이트)
       if (this.onComplete) {
         this.onComplete(this.score, this.maxCombo);
       }
-      this.scene.resume('KitchenScene');
-      this.scene.stop();
+
+      // 4. 약간의 딜레이 후 미니게임 Scene stop
+      this.time.delayedCall(50, () => {
+        this.scene.stop();
+      });
     });
 
     // 호버 효과
