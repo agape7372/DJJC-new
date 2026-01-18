@@ -1,4 +1,5 @@
 /* 두바이 쫀득 쿠키 타이쿤 - Main Styles */
+/* Premium Typography & Visual Enhancement */
 
 * {
   margin: 0;
@@ -6,12 +7,40 @@
   box-sizing: border-box;
 }
 
+:root {
+  /* 색상 변수 */
+  --color-gold: #FFD700;
+  --color-gold-dark: #B8860B;
+  --color-cream: #FFF8E7;
+  --color-brown: #5D4037;
+  --color-brown-dark: #3E2723;
+  --color-success: #4CAF50;
+  --color-danger: #E53935;
+
+  /* 타이포그래피 변수 */
+  --font-primary: 'DungGeunMo', 'Galmuri11', monospace;
+  --font-secondary: 'Noto Sans KR', sans-serif;
+
+  /* 간격 변수 */
+  --letter-spacing-tight: -0.02em;
+  --letter-spacing-normal: 0.02em;
+  --letter-spacing-wide: 0.05em;
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.8;
+}
+
 html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
   background-color: #1a1a2e;
-  font-family: 'DungGeunMo', 'Noto Sans KR', sans-serif;
+  font-family: var(--font-primary);
+  font-size: 16px;
+  line-height: var(--line-height-normal);
+  letter-spacing: var(--letter-spacing-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   touch-action: none;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
@@ -64,22 +93,43 @@ html, body {
   margin-bottom: 2rem;
 }
 
-/* 버튼 스타일 */
+/* 버튼 스타일 (Premium) */
 .game-btn {
-  padding: 1rem 2rem;
+  padding: 1rem 2.5rem;
   font-size: 1.2rem;
-  font-family: inherit;
-  background: linear-gradient(180deg, #27ae60 0%, #1e8449 100%);
-  border: 4px solid #145a32;
-  border-radius: 8px;
+  font-family: var(--font-primary);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  background: linear-gradient(180deg, #4CAF50 0%, #388E3C 50%, #2E7D32 100%);
+  border: none;
+  border-radius: 12px;
   color: #fff;
   cursor: pointer;
-  text-shadow: 2px 2px 0 #000;
-  transition: transform 0.1s;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+  box-shadow:
+    0 4px 0 #1B5E20,
+    0 6px 10px rgba(0,0,0,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.2);
+  transition: all 0.15s ease;
+  position: relative;
+  top: 0;
+}
+
+.game-btn:hover {
+  background: linear-gradient(180deg, #66BB6A 0%, #4CAF50 50%, #388E3C 100%);
+  transform: translateY(-2px);
+  box-shadow:
+    0 6px 0 #1B5E20,
+    0 8px 15px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.3);
 }
 
 .game-btn:active {
-  transform: scale(0.95);
+  transform: translateY(2px);
+  box-shadow:
+    0 2px 0 #1B5E20,
+    0 3px 5px rgba(0,0,0,0.2),
+    inset 0 1px 0 rgba(255,255,255,0.1);
 }
 
 /* 말풍선 */

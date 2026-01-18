@@ -1,14 +1,19 @@
 {
   "name": "djjc-dubai-cookie-tycoon",
-  "version": "1.0.0",
-  "description": "두바이 쫀득 쿠키 타이쿤 - 모바일 타이쿤 게임",
+  "version": "2.0.0",
+  "description": "두바이 쫀득 쿠키 타이쿤 - Phaser.js 기반 모바일 타이쿤 게임",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1"
   },
   "devDependencies": {
-    "vite": "^5.0.0"
+    "vite": "^5.0.0",
+    "vitest": "^4.0.17"
   }
 }

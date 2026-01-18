@@ -7,8 +7,18 @@ export class SoundManager {
   constructor() {
     this.audioContext = null;
     this.masterGain = null;
+    this.sfxGain = null;
+    this.bgmGain = null;
     this.enabled = true;
     this.volume = 0.5;
+    this.sfxVolume = 0.5;
+    this.bgmVolume = 0.3;
+
+    // BGM 상태
+    this.currentBGM = null;
+    this.bgmNodes = [];
+    this.bgmInterval = null;
+    this.bgmBeatIndex = 0;
 
     this.init();
   }
@@ -16,9 +26,21 @@ export class SoundManager {
   init() {
     try {
       this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+      // 마스터 게인
       this.masterGain = this.audioContext.createGain();
       this.masterGain.connect(this.audioContext.destination);
       this.masterGain.gain.value = this.volume;
+
+      // SFX 게인 (마스터에 연결)
+      this.sfxGain = this.audioContext.createGain();
+      this.sfxGain.connect(this.masterGain);
+      this.sfxGain.gain.value = this.sfxVolume;
+
+      // BGM 게인 (마스터에 연결)
+      this.bgmGain = this.audioContext.createGain();
+      this.bgmGain.connect(this.masterGain);
+      this.bgmGain.gain.value = this.bgmVolume;
     } catch (e) {
       console.warn('Web Audio API not supported:', e);
       this.enabled = false;
@@ -35,12 +57,32 @@ export class SoundManager {
   }
 
   /**
-   * 볼륨 설정
+   * 마스터 볼륨 설정
    */
   setVolume(value) {
     this.volume = Math.max(0, Math.min(1, value));
     if (this.masterGain) {
       this.masterGain.gain.value = this.volume;
+    }
+  }
+
+  /**
+   * SFX 볼륨 설정
+   */
+  setSFXVolume(value) {
+    this.sfxVolume = Math.max(0, Math.min(1, value));
+    if (this.sfxGain) {
+      this.sfxGain.gain.value = this.sfxVolume;
+    }
+  }
+
+  /**
+   * BGM 볼륨 설정
+   */
+  setBGMVolume(value) {
+    this.bgmVolume = Math.max(0, Math.min(1, value));
+    if (this.bgmGain) {
+      this.bgmGain.gain.value = this.bgmVolume;
     }
   }
 
@@ -825,6 +867,409 @@ export class SoundManager {
     }
 
     return buffer;
+  }
+
+  // ==================== BGM 시스템 ====================
+
+  /**
+   * BGM 정의 - 프로시저럴 음악 패턴
+   */
+  getBGMConfig(type) {
+    const configs = {
+      // 카운터 BGM - 밝고 경쾌한 분위기
+      counter: {
+        bpm: 100,
+        key: 'C',
+        // 코드 진행: C - Am - F - G (팝 진행)
+        chords: [
+          [261.63, 329.63, 392.00],  // C (C4, E4, G4)
+          [220.00, 261.63, 329.63],  // Am (A3, C4, E4)
+          [174.61, 220.00, 261.63],  // F (F3, A3, C4)
+          [196.00, 246.94, 293.66]   // G (G3, B3, D4)
+        ],
+        bass: [130.81, 110.00, 87.31, 98.00],  // C3, A2, F2, G2
+        melody: [
+          523.25, 587.33, 659.25, 587.33,  // C5, D5, E5, D5
+          523.25, 493.88, 440.00, 493.88,  // C5, B4, A4, B4
+          440.00, 392.00, 349.23, 392.00,  // A4, G4, F4, G4
+          392.00, 440.00, 493.88, 523.25   // G4, A4, B4, C5
+        ],
+        style: 'cheerful'
+      },
+
+      // 주방 BGM - 집중적이고 리드미컬한 분위기
+      kitchen: {
+        bpm: 120,
+        key: 'Am',
+        // 코드 진행: Am - Dm - E - Am (마이너 진행)
+        chords: [
+          [220.00, 261.63, 329.63],  // Am
+          [146.83, 174.61, 220.00],  // Dm (D3, F3, A3)
+          [164.81, 207.65, 246.94],  // E (E3, G#3, B3)
+          [220.00, 261.63, 329.63]   // Am
+        ],
+        bass: [110.00, 73.42, 82.41, 110.00],  // A2, D2, E2, A2
+        melody: [
+          440.00, 493.88, 523.25, 493.88,
+          440.00, 392.00, 329.63, 349.23,
+          329.63, 349.23, 392.00, 329.63,
+          440.00, 392.00, 349.23, 329.63
+        ],
+        style: 'focused'
+      },
+
+      // 미니게임 BGM - 긴장감 있는 분위기
+      minigame: {
+        bpm: 140,
+        key: 'Em',
+        // 코드 진행: Em - C - D - Em (드라마틱)
+        chords: [
+          [164.81, 196.00, 246.94],  // Em (E3, G3, B3)
+          [130.81, 164.81, 196.00],  // C (C3, E3, G3)
+          [146.83, 185.00, 220.00],  // D (D3, F#3, A3)
+          [164.81, 196.00, 246.94]   // Em
+        ],
+        bass: [82.41, 65.41, 73.42, 82.41],  // E2, C2, D2, E2
+        melody: [
+          659.25, 587.33, 523.25, 587.33,
+          523.25, 493.88, 440.00, 392.00,
+          440.00, 493.88, 523.25, 587.33,
+          659.25, 587.33, 523.25, 493.88
+        ],
+        style: 'tense'
+      },
+
+      // 메뉴/타이틀 BGM - 차분하고 편안한 분위기
+      menu: {
+        bpm: 75,
+        key: 'F',
+        chords: [
+          [174.61, 220.00, 261.63],  // F (F3, A3, C4)
+          [196.00, 246.94, 293.66],  // G (G3, B3, D4)
+          [220.00, 261.63, 329.63],  // Am
+          [174.61, 220.00, 261.63]   // F
+        ],
+        bass: [87.31, 98.00, 110.00, 87.31],
+        melody: [
+          349.23, 392.00, 440.00, 392.00,
+          440.00, 493.88, 523.25, 493.88,
+          440.00, 392.00, 349.23, 329.63,
+          349.23, 329.63, 293.66, 329.63
+        ],
+        style: 'calm'
+      }
+    };
+
+    return configs[type] || configs.menu;
+  }
+
+  /**
+   * BGM 시작
+   * @param {string} type - 'counter', 'kitchen', 'minigame', 'menu'
+   * @param {boolean} fadeIn - 페이드 인 여부
+   */
+  startBGM(type, fadeIn = true) {
+    if (!this.enabled || !this.audioContext) return;
+
+    // 이미 같은 BGM이 재생 중이면 무시
+    if (this.currentBGM === type) return;
+
+    // 기존 BGM 정지
+    this.stopBGM(fadeIn);
+
+    this.currentBGM = type;
+    const config = this.getBGMConfig(type);
+
+    // BPM에서 비트 간격 계산 (ms)
+    const beatInterval = (60 / config.bpm) * 1000;
+
+    // 페이드 인
+    if (fadeIn && this.bgmGain) {
+      this.bgmGain.gain.setValueAtTime(0, this.audioContext.currentTime);
+      this.bgmGain.gain.linearRampToValueAtTime(
+        this.bgmVolume,
+        this.audioContext.currentTime + 1
+      );
+    }
+
+    this.bgmBeatIndex = 0;
+
+    // 비트 루프 시작
+    this.bgmInterval = setInterval(() => {
+      this._playBGMBeat(config);
+    }, beatInterval);
+
+    // 첫 비트 즉시 재생
+    this._playBGMBeat(config);
+  }
+
+  /**
+   * BGM 비트 재생
+   */
+  _playBGMBeat(config) {
+    if (!this.enabled || !this.audioContext || !this.currentBGM) return;
+
+    const now = this.audioContext.currentTime;
+    const chordIndex = Math.floor(this.bgmBeatIndex / 4) % config.chords.length;
+    const beatInMeasure = this.bgmBeatIndex % 4;
+    const melodyIndex = this.bgmBeatIndex % config.melody.length;
+
+    // 코드 패드 (첫 비트에만)
+    if (beatInMeasure === 0) {
+      this._playChordPad(config.chords[chordIndex], config.style, now);
+    }
+
+    // 베이스 (1, 3 비트)
+    if (beatInMeasure === 0 || beatInMeasure === 2) {
+      this._playBassNote(config.bass[chordIndex], config.style, now);
+    }
+
+    // 멜로디 (스타일에 따라 다름)
+    if (config.style === 'cheerful' || config.style === 'focused') {
+      // 모든 비트에 멜로디
+      this._playMelodyNote(config.melody[melodyIndex], config.style, now);
+    } else if (config.style === 'tense') {
+      // 빠른 아르페지오
+      this._playMelodyNote(config.melody[melodyIndex], config.style, now);
+    } else if (config.style === 'calm') {
+      // 느린 멜로디 (2비트마다)
+      if (beatInMeasure % 2 === 0) {
+        this._playMelodyNote(config.melody[melodyIndex], config.style, now);
+      }
+    }
+
+    // 퍼커션 (킥)
+    if (beatInMeasure === 0 || beatInMeasure === 2) {
+      this._playKick(config.style, now);
+    }
+
+    // 하이햇 (오프비트)
+    if (config.style !== 'calm') {
+      this._playHiHat(config.style, now);
+    }
+
+    this.bgmBeatIndex++;
+  }
+
+  /**
+   * 코드 패드 재생
+   */
+  _playChordPad(frequencies, style, startTime) {
+    const duration = style === 'calm' ? 2 : 1;
+    const volume = style === 'calm' ? 0.08 : 0.06;
+
+    frequencies.forEach((freq, i) => {
+      const osc = this.audioContext.createOscillator();
+      osc.type = style === 'tense' ? 'sawtooth' : 'triangle';
+      osc.frequency.value = freq;
+
+      const filter = this.audioContext.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = style === 'calm' ? 800 : 1200;
+      filter.Q.value = 0.5;
+
+      const gain = this.audioContext.createGain();
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(volume, startTime + 0.1);
+      gain.gain.setValueAtTime(volume, startTime + duration - 0.2);
+      gain.gain.linearRampToValueAtTime(0, startTime + duration);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.bgmGain);
+
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    });
+  }
+
+  /**
+   * 베이스 노트 재생
+   */
+  _playBassNote(freq, style, startTime) {
+    const duration = 0.3;
+    const volume = 0.12;
+
+    const osc = this.audioContext.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+
+    // 서브 오실레이터 (옥타브 아래)
+    const subOsc = this.audioContext.createOscillator();
+    subOsc.type = 'sine';
+    subOsc.frequency.value = freq / 2;
+
+    const gain = this.audioContext.createGain();
+    gain.gain.setValueAtTime(volume, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+
+    const subGain = this.audioContext.createGain();
+    subGain.gain.setValueAtTime(volume * 0.5, startTime);
+    subGain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+
+    osc.connect(gain);
+    subOsc.connect(subGain);
+    gain.connect(this.bgmGain);
+    subGain.connect(this.bgmGain);
+
+    osc.start(startTime);
+    osc.stop(startTime + duration);
+    subOsc.start(startTime);
+    subOsc.stop(startTime + duration);
+  }
+
+  /**
+   * 멜로디 노트 재생
+   */
+  _playMelodyNote(freq, style, startTime) {
+    const duration = style === 'calm' ? 0.5 : 0.2;
+    const volume = style === 'calm' ? 0.1 : 0.08;
+
+    const osc = this.audioContext.createOscillator();
+    osc.type = style === 'tense' ? 'square' : 'sine';
+    osc.frequency.value = freq;
+
+    const filter = this.audioContext.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = style === 'tense' ? 2000 : 3000;
+
+    const gain = this.audioContext.createGain();
+    gain.gain.setValueAtTime(0, startTime);
+    gain.gain.linearRampToValueAtTime(volume, startTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.bgmGain);
+
+    osc.start(startTime);
+    osc.stop(startTime + duration);
+  }
+
+  /**
+   * 킥 드럼 재생
+   */
+  _playKick(style, startTime) {
+    const volume = style === 'calm' ? 0.08 : 0.15;
+
+    const osc = this.audioContext.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(150, startTime);
+    osc.frequency.exponentialRampToValueAtTime(40, startTime + 0.1);
+
+    const gain = this.audioContext.createGain();
+    gain.gain.setValueAtTime(volume, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.15);
+
+    osc.connect(gain);
+    gain.connect(this.bgmGain);
+
+    osc.start(startTime);
+    osc.stop(startTime + 0.15);
+  }
+
+  /**
+   * 하이햇 재생
+   */
+  _playHiHat(style, startTime) {
+    const duration = style === 'tense' ? 0.03 : 0.05;
+    const volume = style === 'tense' ? 0.06 : 0.04;
+
+    const noiseBuffer = this.createNoiseBuffer(duration);
+    const noiseSource = this.audioContext.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+
+    const filter = this.audioContext.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 7000;
+
+    const gain = this.audioContext.createGain();
+    gain.gain.setValueAtTime(volume, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+    noiseSource.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.bgmGain);
+
+    noiseSource.start(startTime);
+    noiseSource.stop(startTime + duration);
+  }
+
+  /**
+   * BGM 정지
+   * @param {boolean} fadeOut - 페이드 아웃 여부
+   */
+  stopBGM(fadeOut = true) {
+    if (this.bgmInterval) {
+      clearInterval(this.bgmInterval);
+      this.bgmInterval = null;
+    }
+
+    if (fadeOut && this.bgmGain && this.audioContext) {
+      const now = this.audioContext.currentTime;
+      this.bgmGain.gain.setValueAtTime(this.bgmGain.gain.value, now);
+      this.bgmGain.gain.linearRampToValueAtTime(0, now + 0.5);
+
+      // 페이드 아웃 후 볼륨 복원
+      setTimeout(() => {
+        if (this.bgmGain) {
+          this.bgmGain.gain.value = this.bgmVolume;
+        }
+      }, 600);
+    }
+
+    this.currentBGM = null;
+    this.bgmBeatIndex = 0;
+  }
+
+  /**
+   * BGM 일시정지
+   */
+  pauseBGM() {
+    if (this.bgmInterval) {
+      clearInterval(this.bgmInterval);
+      this.bgmInterval = null;
+    }
+    // currentBGM은 유지 (resume용)
+  }
+
+  /**
+   * BGM 재개
+   */
+  resumeBGM() {
+    if (this.currentBGM && !this.bgmInterval) {
+      const config = this.getBGMConfig(this.currentBGM);
+      const beatInterval = (60 / config.bpm) * 1000;
+
+      this.bgmInterval = setInterval(() => {
+        this._playBGMBeat(config);
+      }, beatInterval);
+    }
+  }
+
+  /**
+   * BGM 전환 (크로스페이드)
+   */
+  switchBGM(newType, crossfadeDuration = 1) {
+    if (!this.enabled || !this.audioContext) return;
+    if (this.currentBGM === newType) return;
+
+    // 현재 BGM 페이드 아웃
+    if (this.bgmGain) {
+      const now = this.audioContext.currentTime;
+      this.bgmGain.gain.setValueAtTime(this.bgmGain.gain.value, now);
+      this.bgmGain.gain.linearRampToValueAtTime(0, now + crossfadeDuration / 2);
+    }
+
+    // 새 BGM 시작 (딜레이 후)
+    setTimeout(() => {
+      if (this.bgmInterval) {
+        clearInterval(this.bgmInterval);
+        this.bgmInterval = null;
+      }
+      this.currentBGM = null;
+      this.startBGM(newType, true);
+    }, (crossfadeDuration / 2) * 1000);
   }
 }
 

@@ -10,7 +10,7 @@
  * 6. 엣지 케이스
  */
 
-// 테스트용 Mock localStorage
+// 테스트용 Mock localStorage (import 전에 설정 필수)
 const mockStorage = {
   data: {},
   getItem(key) { return this.data[key] || null; },
@@ -20,12 +20,12 @@ const mockStorage = {
 };
 
 // Node.js 환경에서 테스트할 경우 globalThis에 localStorage 설정
-if (typeof globalThis !== 'undefined' && !globalThis.localStorage) {
+if (typeof globalThis !== 'undefined') {
   globalThis.localStorage = mockStorage;
 }
 
-// TimeManager 모듈 import (경로는 실행 환경에 맞게 조정)
-import {
+// TimeManager 모듈 동적 import (mock 설정 후 로드)
+const {
   timeManager,
   TimePeriod,
   DayOfWeek,
@@ -33,7 +33,7 @@ import {
   DayEffects,
   ActivityEnergyCost,
   SpecialEventType
-} from '../src/core/TimeManager.js';
+} = await import('../src/core/TimeManager.js');
 
 // 간단한 테스트 프레임워크
 const tests = [];

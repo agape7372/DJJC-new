@@ -756,13 +756,919 @@ PIXEL_FONT = {
 
 ---
 
-## Phase 10: 추가 기능 (예정) 📋
+## Phase 10: Phaser.js 마이그레이션 ✅
+**완료일: 2026-01-18**
+
+### 개요
+기존 Canvas API 기반 게임을 Phaser.js v3로 마이그레이션. 모듈형 OOP 아키텍처 적용.
+
+### 1. 아키텍처 설계
+```
+src/phaser/
+├── main.js                    # Phaser 게임 엔트리포인트
+├── config/
+│   └── GameConfig.js          # 게임 상수, 색상, 레시피, 손님 타입
+├── managers/
+│   ├── EventEmitter.js        # 이벤트 발행/구독 시스템 (느슨한 결합)
+│   └── GameManager.js         # 싱글톤 상태 관리 (골드, 인벤토리, 통계)
+├── prefabs/
+│   ├── Customer.js            # 손님 프리팹 (spawn, interact, leave)
+│   ├── Ingredient.js          # 재료 프리팹 + IngredientStation
+│   └── Cookie.js              # 쿠키 프리팹 (등급, 가격, 신선도)
+└── scenes/
+    ├── BootScene.js           # 에셋 로딩 (프로시저럴 텍스처)
+    ├── CounterScene.js        # 손님 응대 메인 홀
+    ├── KitchenScene.js        # 쿠키 조리실 (드래그&드롭)
+    └── UIScene.js             # 오버레이 UI (골드, 설정, 대기주문)
+```
+
+### 2. 핵심 모듈
+
+#### GameManager (싱글톤)
+- **상태 관리**: 골드, 날짜, 에너지, 평판, 인벤토리, 통계, 설정
+- **이벤트 기반**: EventEmitter 상속으로 상태 변경 시 구독자에게 알림
+- **자동 저장**: 디바운스 적용 (1초 간격)
+- **LocalStorage 연동**: 저장/불러오기/리셋
+
+#### Customer Prefab
+- **상태 머신**: idle → waiting → happy/angry → leaving
+- **메서드**: spawn(), generateOrder(), onOrderAccepted/Rejected(), leave()
+- **인내심 시스템**: 시간 경과에 따른 인내심 감소, 소진 시 평판 하락
+- **타입별 장식**: 힙스터(수염), 할머니(안경), 비즈니스맨(넥타이), 관광객(카메라)
+
+#### Ingredient Prefab
+- **드래그&드롭**: Phaser 내장 드래그 시스템 활용
+- **원위치 복귀**: 드롭 실패 시 애니메이션으로 복귀
+- **수량 표시**: GameManager와 연동하여 실시간 업데이트
+- **IngredientStation**: 재료 공급 스테이션 (수량 관리)
+
+#### Cookie Prefab
+- **등급 시스템**: S(90+)/A(75+)/B(50+)/C 등급
+- **가격 계산**: 기본가 × 품질 배율 × 신선도 배율
+- **토핑 시각화**: 재료에 따른 토핑 배치
+- **판매 애니메이션**: 축소 + 페이드아웃
+
+### 3. Scene 구조
+
+#### BootScene
+- 프로시저럴 텍스처 생성 (손님, 버튼, 아이콘, 말풍선)
+- 폰트 프리로딩 (DungGeunMo)
+- CounterScene + UIScene 동시 시작
+
+#### CounterScene
+- Customer Prefab 사용
+- 말풍선 주문 표시
+- 수락/거절 버튼
+- 주방 이동 버튼
+
+#### KitchenScene
+- IngredientStation으로 재료 배치
+- 작업대 드롭존
+- 진행도 바
+- 오븐 굽기 애니메이션
+
+#### UIScene (오버레이)
+- 상단 헤더 (골드, 일차, 평판)
+- 대기 주문 슬롯 (4개)
+- 설정 모달
+
+### 4. 이벤트 시스템
+
+#### GameManager 이벤트
+| 이벤트 | 발생 시점 |
+|--------|----------|
+| goldChanged | 골드 변경 시 |
+| energyChanged | 에너지 변경 시 |
+| dayChanged | 다음 날로 진행 시 |
+| reputationChanged | 평판 변경 시 |
+| cookieAdded | 쿠키 제작 완료 시 |
+| cookieSold | 쿠키 판매 시 |
+| ingredientUsed | 재료 사용 시 |
+| ingredientAdded | 재료 추가 시 |
+| recipeUnlocked | 레시피 해금 시 |
+| upgradeChanged | 업그레이드 구매 시 |
+
+#### Scene 간 이벤트
+| 이벤트 | 발신자 | 수신자 |
+|--------|--------|--------|
+| orderAccepted | CounterScene | UIScene |
+| cookieCompleted | KitchenScene | CounterScene |
+| goldChanged | GameManager | UIScene |
+
+### 5. 개발 도구
+
+#### 디버그 헬퍼 (개발 모드)
+```javascript
+debug.addGold(1000)      // 골드 추가
+debug.fillIngredients()  // 모든 재료 100개
+debug.nextDay()          // 다음 날로
+debug.status()           // 상태 출력
+debug.reset()            // 게임 리셋
+```
+
+### 생성된 파일
+- `src/phaser/main.js` - Phaser 게임 설정 및 초기화
+- `src/phaser/config/GameConfig.js` - 게임 상수
+- `src/phaser/managers/EventEmitter.js` - 이벤트 시스템
+- `src/phaser/managers/GameManager.js` - 상태 관리 싱글톤
+- `src/phaser/prefabs/Customer.js` - 손님 프리팹
+- `src/phaser/prefabs/Ingredient.js` - 재료 프리팹
+- `src/phaser/prefabs/Cookie.js` - 쿠키 프리팹
+- `src/phaser/scenes/BootScene.js` - 부팅 씬
+- `src/phaser/scenes/CounterScene.js` - 카운터 씬
+- `src/phaser/scenes/KitchenScene.js` - 주방 씬
+- `src/phaser/scenes/UIScene.js` - UI 씬
+
+### 수정된 파일
+- `index.html` - Phaser 엔트리포인트로 변경
+- `package.json` - phaser@^3.80.1 의존성 추가
+- `vite.config.js` - Phaser 최적화 설정
+
+---
+
+## Phase 10.1: Juiciness 효과 시스템 ✅
+**완료일: 2026-01-18**
+
+### 개요
+게임에 "타격감"과 "생동감"을 불어넣기 위한 연출 효과 시스템 구현.
+
+### 1. EffectsManager 유틸리티
+중앙화된 이펙트 관리 클래스로 모든 씬에서 재사용 가능.
+
+#### Squash & Stretch (탄성 애니메이션)
+| 메서드 | 설명 |
+|--------|------|
+| `buttonPress(target)` | 버튼 누르기 (찌그러짐 → 복원) |
+| `pickUp(target)` | 아이템 집기 (확대 → 복원) |
+| `drop(target)` | 아이템 놓기 (바운스) |
+| `popIn(target)` | 등장 바운스 |
+| `popOut(target)` | 사라짐 바운스 |
+| `pulse(target)` | 펄스 효과 (주기적 크기 변화) |
+| `jelly(target)` | 젤리 흔들림 |
+| `jump(target)` | 점프 효과 |
+
+#### Particle Explosions (파티클 이펙트)
+| 메서드 | 설명 |
+|--------|------|
+| `ingredientSplash(x, y, palette)` | 재료 드롭 스플래시 |
+| `heartBurst(x, y)` | 하트 파티클 (손님 만족) |
+| `starBurst(x, y)` | 별 파티클 (성공/완성) |
+| `coinShower(x, y)` | 코인 획득 효과 |
+| `sparkle(x, y)` | 마법 스파클 |
+| `explosionRing(x, y)` | 폭발 링 효과 |
+| `floatingText(x, y, text)` | 떠오르는 텍스트 (점수, 보너스) |
+
+#### Camera Effects (카메라 효과)
+| 메서드 | 설명 |
+|--------|------|
+| `microShake()` | 미세한 흔들림 |
+| `mediumShake()` | 중간 흔들림 |
+| `bigShake()` | 큰 흔들림 |
+| `successFlash()` | 녹색 플래시 |
+| `goldFlash()` | 골드 플래시 |
+| `failFlash()` | 빨간 플래시 |
+| `zoomPunch()` | 줌 펀치 (확대 → 복귀) |
+| `slowMotion()` | 슬로우 모션 |
+
+#### Combo Effects (콤보/연출)
+| 메서드 | 설명 |
+|--------|------|
+| `comboHit(x, y, count)` | 콤보 달성 효과 |
+| `moneyGain(x, y, amount)` | 돈 획득 효과 |
+| `celebrate(x, y)` | 완성 축하 효과 |
+| `fail(x, y)` | 실패 효과 |
+| `customerHappy(x, y)` | 손님 만족 효과 |
+| `customerAngry(x, y)` | 손님 불만족 효과 |
+
+### 2. 색상 팔레트 (FX_COLORS)
+```javascript
+gold: [0xFFD700, 0xFFA500, 0xFFE135]      // 금색 계열
+success: [0x4CAF50, 0x8BC34A, 0xCDDC39]   // 녹색 계열
+love: [0xFF6B6B, 0xFF8E8E, 0xFFB3B3]      // 분홍 계열
+dust: [0xD4A574, 0xC9A86C, 0xE8C99B]      // 먼지/면발
+chocolate: [0x4A3728, 0x5D4037, 0x6D4C41] // 초콜릿
+pistachio: [0x7CB342, 0x8BC34A, 0x9CCC65] // 피스타치오
+cream: [0xFFF5EE, 0xFFE4E1, 0xFFFAFA]     // 크림
+sparkle: [0xFFFFFF, 0xFFF8DC, 0xFFFFE0]   // 스파클
+```
+
+### 3. Scene 통합
+
+#### KitchenScene
+- [x] 반죽 펄스 애니메이션 (생동감)
+- [x] 버튼 누름 효과 (굽기, 리셋, 뒤로가기)
+- [x] 재료 드롭 스플래시 (재료별 색상)
+- [x] 재료 추가 시 반죽 바운스
+- [x] 4재료 완성 시 스파클 + 폭발 링
+- [x] 굽기 시 줌 펀치
+- [x] 완성 축하 효과 (celebrate + coinShower)
+- [x] 실패 시 흔들림 + 빨간 플래시
+
+#### CounterScene
+- [x] 버튼 누름 효과 (수락, 거절, 주방)
+- [x] 손님 등장 팝인 효과
+- [x] 주문 수락 시 하트 버스트
+- [x] 주문 거절 시 연기 + 빨간 플래시
+- [x] 손님 만족 퇴장 시 스파클 + 하트
+- [x] 주문 완료 시 돈 획득 효과 + 별 폭발
+
+### 생성된 파일
+- `src/phaser/managers/EffectsManager.js` - 이펙트 유틸리티 클래스 (680줄)
+
+### 수정된 파일
+- `src/phaser/scenes/KitchenScene.js` - EffectsManager 통합
+- `src/phaser/scenes/CounterScene.js` - EffectsManager 통합
+
+---
+
+## Phase 10.2: 메모리 누수 및 Scene 라이프사이클 버그 수정 ✅
+**완료일: 2026-01-18**
+
+### 개요
+Phaser 3 Scene 라이프사이클 분석 후 메모리 누수 및 이벤트 리스너 정리 문제를 수정.
+
+### 1. 발견된 버그
+
+#### KitchenScene.js
+| 버그 | 심각도 | 설명 |
+|------|--------|------|
+| shutdown() 미구현 | Critical | Scene 종료 시 리소스 정리 안 됨 |
+| Input 리스너 누적 | High | dragstart/drag/dragend 리스너가 scene 재진입마다 누적 |
+| 무한 Tween 누수 | High | `repeat: -1` 펄스 애니메이션이 정지 안 됨 |
+
+#### CounterScene.js
+| 버그 | 심각도 | 설명 |
+|------|--------|------|
+| Scene 이벤트 정리 불완전 | Medium | wake/cookieCompleted/customerLeft 리스너 누적 |
+| 바운드 핸들러 미저장 | Medium | off() 호출 시 원본 함수 참조 불가 |
+
+#### UIScene.js
+| 버그 | 심각도 | 설명 |
+|------|--------|------|
+| update() GC 압력 | Medium | 매 프레임 문자열 생성 (60회/초) |
+| 값 비교 없이 setText() | Low | 동일 값이어도 매번 setText 호출 |
+
+#### EffectsManager.js
+| 버그 | 심각도 | 설명 |
+|------|--------|------|
+| 호버 리스너 추적 안 됨 | Medium | addHoverEffect() 리스너 제거 불가 |
+| delayedCall 추적 안 됨 | Medium | Scene 종료 시 남은 타이머가 에러 유발 |
+| 파티클 정리 불완전 | Low | 자체 destroy 전 scene 종료 시 누수 |
+
+### 2. 핵심 발견: scene.switch() vs scene.stop()
+- `scene.switch()`는 `shutdown()` 호출 안 함 → `sleep` 이벤트 발생
+- `scene.stop()`만 `shutdown()` 호출
+- **해결**: `sleep` 이벤트 핸들러 추가로 cleanup 보장
+
+### 3. 적용된 수정
+
+#### KitchenScene.js
+```javascript
+// [Fix] Scene이 sleep 상태로 전환될 때
+sleep() { this._cleanupForSleep(); }
+
+// [Fix] Scene이 완전히 종료될 때
+shutdown() {
+  this._cleanupForSleep();
+  if (this.fx) { this.fx.destroy(); this.fx = null; }
+}
+
+// [Fix] sleep/shutdown 공통 정리 로직
+_cleanupForSleep() {
+  if (this.doughPulseTween) {
+    this.doughPulseTween.stop();
+    this.doughPulseTween = null;
+  }
+  this.tweens.killTweensOf(this.dropHighlight);
+  this.input.off('dragstart');
+  this.input.off('drag');
+  this.input.off('dragend');
+}
+```
+
+#### CounterScene.js
+```javascript
+_setupEventListeners() {
+  // [Fix] 바운드 핸들러 저장 (나중에 off() 호출 위해)
+  this._onWakeHandler = () => { this.cameras.main.fadeIn(300); };
+  this._onCookieCompletedHandler = (data) => { this._onCookieCompleted(data); };
+  // ...
+  this.events.on('wake', this._onWakeHandler);
+  this.events.on('sleep', this._onSleep, this);
+}
+```
+
+#### UIScene.js
+```javascript
+create() {
+  // [Fix] 캐시된 값으로 GC 압력 제거
+  this._cachedDay = gameManager.day;
+  this._cachedReputation = gameManager.reputation;
+}
+
+update() {
+  // [Fix] 값이 변경된 경우에만 setText 호출
+  if (this._cachedDay !== gameManager.day) {
+    this._cachedDay = gameManager.day;
+    this.dayText.setText(`${this._cachedDay}일차`);
+  }
+}
+```
+
+#### EffectsManager.js
+```javascript
+constructor(scene) {
+  // [Fix] 추적용 배열들
+  this._activeParticles = [];
+  this._hoverTargets = [];
+  this._delayedCalls = [];
+}
+
+// [Fix] 안전한 delayedCall 생성
+_trackedDelayedCall(delay, callback) {
+  if (!this.scene || !this.scene.time) return null;
+  const timer = this.scene.time.delayedCall(delay, () => {
+    const idx = this._delayedCalls.indexOf(timer);
+    if (idx > -1) this._delayedCalls.splice(idx, 1);
+    callback();
+  });
+  this._delayedCalls.push(timer);
+  return timer;
+}
+
+destroy() {
+  // 1. 호버 리스너 제거
+  this._hoverTargets.forEach(({ target, onOver, onOut }) => {
+    target.off('pointerover', onOver);
+    target.off('pointerout', onOut);
+  });
+  // 2. 활성 파티클 정리
+  this._activeParticles.forEach(p => p?.destroy());
+  // 3. 대기 중인 delayedCall 취소
+  this._delayedCalls.forEach(t => t?.remove(false));
+  // 4. 참조 해제
+  this.scene = null;
+}
+```
+
+### 수정된 파일
+- `src/phaser/scenes/KitchenScene.js` - sleep/shutdown 핸들러 추가
+- `src/phaser/scenes/CounterScene.js` - 바운드 핸들러 저장, sleep 핸들러 추가
+- `src/phaser/scenes/UIScene.js` - 캐시된 값 비교로 GC 압력 감소
+- `src/phaser/managers/EffectsManager.js` - 리소스 추적 및 안전한 정리
+
+### 메모리 누수 방지 패턴 요약
+1. `repeat: -1` Tween은 반드시 참조 저장 후 `stop()` 호출
+2. 익명 함수 리스너는 바운드 참조 저장 후 `off(event, handler)` 호출
+3. `scene.switch()` 사용 시 `sleep` 이벤트에서 정리
+4. delayedCall은 추적 배열에 저장 후 destroy에서 `remove(false)` 호출
+
+---
+
+## Phase 10.3: 코드 다이어트 (리팩토링) ✅
+**완료일: 2026-01-18**
+
+### 개요
+기능 변경 없이 코드의 가독성, 효율성, 유지보수성을 극대화하는 리팩토링 수행.
+
+### 1. Diet Report (다이어트 결과)
+
+| 개선 항목 | 절감 효과 |
+|----------|----------|
+| `fontFamily: 'DungGeunMo, monospace'` → `FONT_FAMILY` 상수 | 50+ 반복 제거 |
+| 버튼 텍스처 생성 팩토리 패턴 | ~30줄 절감 |
+| 파티클 cleanup 헬퍼 통합 | ~50줄 절감 |
+| 디버그 console.log 제거 | 8개 불필요 로그 삭제 |
+| `hexToString()` 유틸리티 추출 | 4회 반복 패턴 통합 |
+
+### 2. GameConfig.js에 추가된 유틸리티
+
+```javascript
+// 폰트 패밀리 상수 (DRY)
+export const FONT_FAMILY = 'DungGeunMo, monospace';
+
+// 16진수 색상 → CSS 문자열 변환
+export const hexToString = (hex) => '#' + hex.toString(16).padStart(6, '0');
+
+// 텍스트 스타일 생성 헬퍼
+export const textStyle = (size, color = '#FFF8E7', extras = {}) => ({
+  fontFamily: FONT_FAMILY,
+  fontSize: size,
+  color,
+  ...extras
+});
+
+// 픽셀 스타일 버튼 생성 팩토리
+export const createPixelButton = (scene, x, y, width, height, color, text, options) => {
+  // Shadow + Body + Text 패턴 통합
+};
+```
+
+### 3. EffectsManager.js 파티클 클린업 통합
+
+```javascript
+// Before: 각 파티클 메서드마다 8줄씩 반복
+particles.explode();
+this._activeParticles.push(particles);
+this._trackedDelayedCall(500, () => {
+  const idx = this._activeParticles.indexOf(particles);
+  if (idx > -1) this._activeParticles.splice(idx, 1);
+  if (particles && particles.destroy) particles.destroy();
+});
+
+// After: 헬퍼 함수로 1줄로 단축
+particles.explode();
+this._scheduleParticleCleanup(particles, 500);
+```
+
+### 4. BootScene.js 버튼 텍스처 팩토리
+
+```javascript
+// Before: 동일한 패턴 3회 반복 (~30줄)
+btnGraphics.clear();
+btnGraphics.fillStyle(COLORS.primary, 1);
+btnGraphics.fillRoundedRect(0, 0, 200, 60, 8);
+// ... 생략
+
+// After: 팩토리 패턴 (~10줄)
+const createBtnTexture = (name, color) => {
+  const g = this.make.graphics({ x: 0, y: 0, add: false });
+  g.fillStyle(color, 1);
+  g.fillRoundedRect(0, 0, 200, 60, 8);
+  g.lineStyle(4, 0x2D2016, 1);
+  g.strokeRoundedRect(0, 0, 200, 60, 8);
+  g.generateTexture(name, 200, 60);
+  g.destroy();
+};
+
+createBtnTexture('btn_primary', COLORS.primary);
+createBtnTexture('btn_success', COLORS.success);
+createBtnTexture('btn_danger', COLORS.danger);
+```
+
+### 5. 제거된 디버그 로그
+- KitchenScene: `console.log('[KitchenScene] 씬 생성 완료')`
+- CounterScene: `console.log('[CounterScene] 씬 생성 완료')`, `주문 완료!`
+- UIScene: `console.log('[UIScene] UI 씬 생성 완료')`
+- GameManager: 초기화, 저장, 로드, 리셋 로그 (에러만 유지)
+
+### 수정된 파일
+- `src/phaser/config/GameConfig.js` - 유틸리티 함수 추가
+- `src/phaser/scenes/BootScene.js` - 버튼 텍스처 팩토리
+- `src/phaser/scenes/KitchenScene.js` - FONT_FAMILY 적용
+- `src/phaser/scenes/CounterScene.js` - FONT_FAMILY 적용
+- `src/phaser/scenes/UIScene.js` - FONT_FAMILY 적용
+- `src/phaser/managers/EffectsManager.js` - 파티클 클린업 헬퍼
+- `src/phaser/managers/GameManager.js` - 디버그 로그 제거
+- `src/phaser/prefabs/Customer.js` - hexToString, FONT_FAMILY 적용
+- `src/phaser/prefabs/Ingredient.js` - FONT_FAMILY 적용
+- `src/phaser/prefabs/Cookie.js` - FONT_FAMILY 적용
+
+---
+
+## Phase 10.4: 시각 자산 업그레이드 & 조리 시스템 ✅
+**완료일: 2026-01-18**
+
+### 개요
+프로시저럴 텍스처 팩토리와 4단계 조리 상태 머신 구현.
+
+### 1. AssetFactory (프로시저럴 텍스처 생성기)
+두바이 초콜릿 쿠키의 핵심 재료들을 Phaser Graphics API로 생성.
+
+#### 생성 메서드
+| 메서드 | 설명 |
+|--------|------|
+| `createKadaif(size)` | 튀긴 면발 텍스처 (곡선 라인 + 그림자) |
+| `createPistachioSpread(size)` | 울퉁불퉁한 녹색 스프레드 (#5D8827) |
+| `createCookieDough(size, bakeProgress)` | 초콜릿 칩 도우 (굽기 진행에 따른 색상 보간) |
+| `createChocolateCoating(size)` | 드립 효과가 있는 초콜릿 코팅 |
+
+#### 색상 팔레트 (DUBAI_COOKIE_COLORS)
+```javascript
+kadaif: { base: 0xC9A86C, highlight: 0xE8D4A8, shadow: 0x8B6914 }
+pistachio: { base: 0x5D8827, light: 0x7CB342, dark: 0x33691E }
+dough: { raw: 0xDEB887, baked: 0x8B4513, chips: 0x3E2723 }
+chocolate: { dark: 0x3E2723, milk: 0x5D4037, drip: 0x4E342E }
+```
+
+### 2. KitchenScene 조리 상태 머신
+기존 단순 드래그&드롭에서 8단계 조리 플로우로 확장.
+
+#### CookingStep 열거형
+```javascript
+const CookingStep = {
+  IDLE: 'idle',
+  DOUGH: 'dough',                     // Step 1: 반죽 올리기
+  MINIGAME_KADAIF: 'minigame_kadaif', // Step 2: 카다이프 미니게임
+  MINIGAME_PISTACHIO: 'minigame_pistachio', // Step 3: 피스타치오 미니게임
+  MINIGAME_MARSHMALLOW: 'minigame_marshmallow', // Step 4: 마시멜로우 미니게임
+  BAKING: 'baking',                   // Step 5: 오븐에서 굽기
+  COATING: 'coating',                 // Step 6: 초콜릿 코팅
+  COMPLETE: 'complete'                // Step 7: 완성
+};
+```
+
+#### 조리 흐름
+```
+반죽 올리기 → 카다이프 → 피스타치오 → 마시멜로우 → 굽기 → 코팅 → 완성
+     ↓           ↓           ↓            ↓
+  반죽 생성    점수 기록    점수 기록     점수 기록
+```
+
+### 생성된 파일
+- `src/phaser/prefabs/AssetFactory.js` - 프로시저럴 텍스처 팩토리
+
+### 수정된 파일
+- `src/phaser/scenes/KitchenScene.js` - 8단계 조리 상태 머신
+
+---
+
+## Phase 10.5: 미니게임 Phaser 통합 ✅
+**완료일: 2026-01-18**
+
+### 개요
+기존 Canvas API 기반 미니게임 3종을 Phaser Scene으로 마이그레이션.
+**고품질 OOP 아키텍처**와 **상용 수준의 Juiciness** 적용.
+
+### 아키텍처 패턴
+```javascript
+// 모든 미니게임 공통 구조
+const CONFIG = { /* 게임 상수 */ };
+class GameObjectPrefab { /* OOP 프리팹 */ }
+class EffectClass { /* 정적 이펙트 클래스 */ }
+class MinigameScene extends Phaser.Scene { /* 씬 */ }
+```
+
+---
+
+### 1. KadaifSliceScene (카다이프 썰기)
+**Fruit Ninja 스타일 스와이프 게임** (~1000줄)
+
+#### OOP 클래스 구조
+| 클래스 | 역할 |
+|--------|------|
+| `Kadaif` | 프리팹 - 물리, 회전, 타입별 색상 |
+| `SlicedPiece` | 썰린 조각 - 물리 기반 분리 애니메이션 |
+| `KadaifSliceScene` | 메인 씬 - 스폰, 슬라이스 감지, UI |
+
+#### 게임 규칙
+- 30초 제한시간
+- 화면 아래에서 날아오는 카다이프를 스와이프로 썰기
+- **Wave 스폰**: 15% 확률로 3~5개 동시 발사
+- **콤보 시스템**: 1초 내 연속 슬라이스 시 배수 적용
+
+#### 물리 시스템
+| 상수 | 값 | 설명 |
+|------|-----|------|
+| GRAVITY | 850 | 중력 가속도 |
+| MAX_VX | 180 | 최대 수평 속도 |
+| APEX_MIN | 0.25 | 최소 정점 높이 (상단 25%) |
+| APEX_MAX | 0.45 | 최대 정점 높이 (상단 45%) |
+
+#### 카다이프 타입
+| 타입 | 확률 | 점수 | 색상 |
+|------|------|------|------|
+| normal | 80% | 10점 | 0xC9A86C |
+| premium | 8% | 15점 | 0xD4B896 |
+| golden | 7% | 20점 | 0xFFD700 |
+| super | 5% | 30점 | 0x9B59B6 |
+
+#### Juicy 효과
+- 썰린 조각 물리 분리 (중력 + 회전)
+- 트레일 글로우 이펙트
+- 콤보 텍스트 팝업
+- 화면 흔들림 (콤보 5 이상)
+
+---
+
+### 2. PistachioCrushScene (피스타치오 분쇄)
+**터치 + 피버 모드 게임** (~1100줄)
+
+#### OOP 클래스 구조
+| 클래스 | 역할 |
+|--------|------|
+| `Pistachio` | 프리팹 - 바운스 애니메이션, 타입별 색상 |
+| `CrushEffect` | 정적 클래스 - 껍질 파편 + 파티클 폭발 |
+| `PistachioCrushScene` | 메인 씬 - 스폰, 피버, UI |
+
+#### 게임 규칙
+- 25초 제한시간
+- 피스타치오 탭하여 분쇄
+- **피버 게이지**: 100% 도달 시 3초간 자동 분쇄 모드
+- **바운스 애니메이션**: idle 상태에서 생동감 있는 움직임
+
+#### 피스타치오 타입
+| 타입 | 확률 | 점수 | 피버 | 색상 |
+|------|------|------|------|------|
+| normal | 55% | 10점 | +12% | 0x7CB342 |
+| emerald | 10% | 30점 | +25% | 0x00E676 |
+| roasted | 15% | 20점 | +20% | 0xA1887F |
+| bad | 20% | -15점 | -25% | 0x5D4037 |
+
+#### Juicy 효과
+- 껍질 파편 스플래시 (8방향)
+- 내부 알맹이 팝업
+- 피버 모드 황금빛 펄스
+- 화면 플래시 (골든/에메랄드)
+- 나쁜 피스타치오 연기 이펙트
+
+---
+
+### 3. MarshmallowMeltScene (마시멜로우 녹이기)
+**불 조절 자원 관리 게임** (~1120줄)
+
+#### OOP 클래스 구조
+| 클래스 | 역할 |
+|--------|------|
+| `Pot` | 프리팹 - 마시멜로우 녹음 시각화, 버블 |
+| `FlameEffect` | 정적 클래스 - 3단계 불꽃 애니메이션 |
+| `BubbleEffect` | 정적 클래스 - 끓는 효과 파티클 |
+| `StickWarningEffect` | 정적 클래스 - 들러붙음 연기/스파크 |
+| `MarshmallowMeltScene` | 메인 씬 - 불 조절, 코코아, UI |
+
+#### 게임 규칙
+- 45초 제한시간
+- 마시멜로우를 100%까지 녹이면 완료
+- **3단계 불 조절**: 속도와 리스크 관리
+- **들러붙음 방지**: 연타로 해소
+- **코코아 타이밍**: 40~70% 구간 투입 시 보너스
+
+#### 불 단계
+| 단계 | 녹음 속도 | 들러붙음 속도 | 불꽃 색상 |
+|------|----------|--------------|----------|
+| 약불 | 0.6%/s | 0.2%/s | 0x64B5F6 |
+| 중불 | 1.2%/s | 0.6%/s | 0xFFB74D |
+| 강불 | 2.2%/s | 1.8%/s | 0xFF5722 |
+
+#### 들러붙음 시스템
+- 게이지 70% 이상: 빨간 경고 + 연기 파티클
+- 게이지 100%: 들러붙음 발생 (연타로 해소)
+- 해소당 12% 감소
+
+#### 코코아 타이밍 보너스
+| 진행도 | 결과 |
+|--------|------|
+| 40%~70% | +20점 보너스 (Perfect!) |
+| 40% 미만 | -10점 페널티 |
+| 70% 초과 | -15점 페널티 |
+| 미투입 | -20점 페널티 |
+
+#### Juicy 효과
+- 마시멜로우 색상 보간 (흰색 → 갈색)
+- 불꽃 파티클 (열 단계별 색상)
+- 끓는 버블 이펙트
+- 들러붙음 연기 + 스파크
+- 코코아 투입 파티클
+- 냄비 흔들림 (연타 시)
+
+---
+
+### 4. KitchenScene 통합
+미니게임 Scene을 launch()로 시작하고 완료 콜백으로 점수 수신.
+
+```javascript
+// 미니게임 시작
+this.scene.launch('KadaifSliceScene', {
+  onComplete: (score, maxCombo) => {
+    this.cookieState.kadaifScore = score;
+    this._startStep(CookingStep.MINIGAME_PISTACHIO);
+  }
+});
+this.scene.pause(); // 현재 씬 일시정지
+
+// 품질 계산 (미니게임 점수 반영)
+const totalScore = this.cookieState.kadaifScore +
+                   this.cookieState.pistachioScore +
+                   this.cookieState.marshmallowScore;
+this.cookieState.quality = Math.floor(totalScore / 3);
+```
+
+### 생성된 파일
+- `src/phaser/scenes/minigames/KadaifSliceScene.js` - 카다이프 썰기 (~1000줄)
+- `src/phaser/scenes/minigames/PistachioCrushScene.js` - 피스타치오 분쇄 (~1100줄)
+- `src/phaser/scenes/minigames/MarshmallowMeltScene.js` - 마시멜로우 녹이기 (~1120줄)
+
+### 수정된 파일
+- `src/phaser/main.js` - 미니게임 Scene 등록
+- `src/phaser/scenes/KitchenScene.js` - 미니게임 통합 상태 머신
+
+---
+
+## Phase 10.6: 미니게임 사운드 효과 통합 ✅
+**완료일: 2026-01-18**
+
+### 개요
+기존 `SoundManager`의 프로시저럴 사운드를 Phaser 미니게임에 통합.
+Web Audio API 기반 실시간 사운드 생성으로 외부 오디오 파일 불필요.
+
+### 1. KadaifSliceScene (카다이프 썰기)
+| 이벤트 | 사운드 메서드 | 설명 |
+|--------|-------------|------|
+| 게임 시작 | `playUIClick()` | UI 클릭음 |
+| 게임 완료 | `playSuccess()` | 성공 멜로디 (C-E-G 코드) |
+| 계속하기 버튼 | `playUIClick()` | UI 클릭음 |
+| 스페셜 카다이프 스폰 | `playSpecial()` | 반짝이는 차임 (C5-E5-G5-C6) |
+| 슬라이스 | `playSlice()` | 바삭한 ASMR "까작" 소리 |
+| 스페셜 슬라이스 | `playCrunch()` | 다층 노이즈 크런치 |
+
+### 2. PistachioCrushScene (피스타치오 분쇄)
+| 이벤트 | 사운드 메서드 | 설명 |
+|--------|-------------|------|
+| 게임 완료 | `playSuccess()` | 성공 멜로디 |
+| 스페셜 피스타치오 스폰 | `playSpecial()` | 반짝이는 차임 |
+| 나쁜 피스타치오 터치 | `playFail()` | 하강 스퀘어 웨이브 |
+| 피스타치오 분쇄 | `playCrush()` | 임팩트 + 파편 소리 |
+| 피버 모드 시작 | `playFever()` | 상승 스윕 사운드 |
+
+### 3. MarshmallowMeltScene (마시멜로우 녹이기)
+| 이벤트 | 사운드 메서드 | 설명 |
+|--------|-------------|------|
+| 불 버튼 클릭 | `playUIClick()` | UI 클릭음 |
+| 코코아 투입 | `playCocoaPour()` | 분말 뿌리는 소리 |
+| 연타 해소 | `playTap()` | 짧은 팝 사운드 |
+| 게임 완료 | `playSuccess()` | 성공 멜로디 |
+| 들러붙음 경고 | `playStick()` | 찌직 크래클 노이즈 |
+| 들러붙음 발생 | `playBuzzer()` | 불협화음 부저 |
+| 버블 이펙트 | `playBubble()` | 보글보글 버블 사인파 |
+| 지글지글 (주기적) | `playSizzle(intensity)` | 밴드패스 노이즈 |
+
+### 지글 사운드 시스템
+```javascript
+// 불 세기에 따른 지글 간격 및 세기
+this.sizzleTimer += dt;
+const sizzleInterval = 0.6 - this.heatLevel * 0.15;  // 약불: 0.6s, 강불: 0.3s
+if (this.sizzleTimer >= sizzleInterval) {
+  this.sizzleTimer = 0;
+  soundManager.playSizzle(this.heatLevel / 2);  // intensity: 0 ~ 1
+}
+```
+
+### 4. KitchenScene (쿠키 조리실)
+| 이벤트 | 사운드 메서드 | 설명 |
+|--------|-------------|------|
+| 액션 버튼 클릭 | `playUIClick()` | 모든 버튼 클릭 |
+| 반죽 놓기 | `playCrush()` | 반죽 놓는 효과 |
+| 카다이프 추가 | `playSlice()` | 면발 추가 |
+| 피스타치오 추가 | `playCrush()` | 분쇄 효과 |
+| 굽기 시작 | `playSizzle(0.3)` | 오븐 예열 |
+| 굽는 중 (주기적) | `playSizzle(0.6~0.9)` | 400ms 간격, 6회 반복 |
+| 굽기 완료 | `playSuccess()` | 성공 멜로디 |
+| 초콜릿 코팅 | `playCocoaPour()` | 초콜릿 붓기 |
+| 쿠키 완성 | `playFanfare()` | 팡파레 |
+| 쿠키 저장 | `playCoin()` | 코인 사운드 |
+| 카운터로 버튼 | `playUIClick()` | UI 클릭 |
+
+#### 굽기 사운드 시스템
+```javascript
+// 굽기 중 주기적 사운드 (400ms 간격, 6회)
+this.bakingSoundTimer = this.time.addEvent({
+  delay: 400,
+  callback: () => soundManager.playSizzle(0.6 + Math.random() * 0.3),
+  repeat: 5
+});
+```
+
+---
+
+### SoundManager 사운드 목록
+| 메서드 | 용도 | 기법 |
+|--------|------|------|
+| `playSlice()` | 카다이프 슬라이스 | 하이패스 노이즈 버스트 |
+| `playCrunch()` | 강한 베기 (콤보) | 다층 밴드패스 노이즈 |
+| `playCrush()` | 피스타치오 분쇄 | 임팩트 오실레이터 + 클릭 |
+| `playSizzle(intensity)` | 지글지글 불 소리 | 밴드패스 노이즈 |
+| `playStick()` | 들러붙음 경고 | 쏘우투스 + 크래클 |
+| `playBubble()` | 보글보글 | 사인파 피치 변조 |
+| `playCocoaPour()` | 코코아/초콜릿 투입 | 로우패스 노이즈 + 차임 |
+| `playTap()` | 연타 팝 | 짧은 사인파 |
+| `playSpecial()` | 스페셜 스폰 | 아르페지오 차임 |
+| `playFever()` | 피버 모드 | 상승 스윕 |
+| `playSuccess()` | 성공/완료 | 메이저 코드 (C-E-G) |
+| `playFail()` | 실패/페널티 | 하강 스퀘어 웨이브 |
+| `playBuzzer()` | 에러 알림 | 불협화음 |
+| `playUIClick()` | UI 클릭 | 짧은 클릭 |
+| `playFanfare()` | 팡파레 | 상승 멜로디 (C-E-G-C) |
+| `playCoin()` | 코인 획득 | 상승 핑 (1200→1800Hz) |
+
+### 5. CounterScene (손님 응대)
+| 이벤트 | 사운드 메서드 | 설명 |
+|--------|-------------|------|
+| 수락 버튼 클릭 | `playUIClick()` | UI 클릭음 |
+| 거절 버튼 클릭 | `playUIClick()` | UI 클릭음 |
+| 주방 버튼 클릭 | `playUIClick()` | UI 클릭음 |
+| 손님 등장 | `playNews(true)` | 알림 차임 |
+| 주문 수락 | `playSuccess()` | 성공 멜로디 |
+| 주문 거절 | `playFail()` | 실패 하강음 |
+| 만족 퇴장 | `playTap()` | 기분 좋은 발걸음 |
+| 불만족 퇴장 | `playBuzzer()` | 불만족 부저 |
+| 주문 완료 - 돈 획득 | `playCoin()` | 코인 사운드 |
+| 주문 완료 - 축하 | `playFanfare()` | 팡파레 |
+
+### 6. UIScene (오버레이 UI)
+| 이벤트 | 사운드 메서드 | 설명 |
+|--------|-------------|------|
+| 설정 버튼 클릭 | `playUIClick()` | UI 클릭음 |
+| 골드 증가 | `playCoin()` | 코인 획득음 |
+| 대기 주문 추가 | `playTap()` | 주문 슬롯 팝업 |
+| 대기 주문 완료 | `playSuccess()` | 성공 멜로디 |
+| 진동 토글 클릭 | `playUIClick()` | UI 클릭음 |
+| 데이터 초기화 버튼 | `playUIClick()` | UI 클릭음 |
+| 데이터 초기화 확정 | `playBuzzer()` | 초기화 경고음 |
+| 모달 닫기 버튼 | `playUIClick()` | UI 클릭음 |
+| 볼륨 바 조절 | `playTap()` | 조절 피드백 |
+
+### 수정된 파일
+- `src/phaser/scenes/minigames/KadaifSliceScene.js` - soundManager 임포트 및 6개 사운드 호출
+- `src/phaser/scenes/minigames/PistachioCrushScene.js` - soundManager 임포트 및 5개 사운드 호출
+- `src/phaser/scenes/minigames/MarshmallowMeltScene.js` - soundManager 임포트 및 8개 사운드 호출
+- `src/phaser/scenes/KitchenScene.js` - soundManager 임포트 및 11개 사운드 호출
+- `src/phaser/scenes/CounterScene.js` - soundManager 임포트 및 10개 사운드 호출
+- `src/phaser/scenes/UIScene.js` - soundManager 임포트 및 9개 사운드 호출
+
+---
+
+## Phase 10.7: 프로시저럴 BGM 시스템 ✅
+**완료일: 2026-01-18**
+
+### 개요
+Web Audio API를 사용한 프로시저럴 배경 음악 시스템 구현.
+외부 오디오 파일 없이 실시간으로 음악을 생성하여 용량 최소화.
+
+### 1. BGM 타입
+| 타입 | BPM | 키 | 분위기 | 사용 씬 |
+|------|-----|-----|--------|---------|
+| `counter` | 100 | C Major | 밝고 경쾌 | CounterScene |
+| `kitchen` | 120 | A Minor | 집중적, 리드미컬 | KitchenScene |
+| `minigame` | 140 | E Minor | 긴장감, 드라마틱 | 미니게임 3종 |
+| `menu` | 75 | F Major | 차분하고 편안 | 메뉴/타이틀 |
+
+### 2. 음악 구조
+각 BGM은 다음 요소로 구성:
+- **코드 패드**: 4마디 진행 (예: C-Am-F-G)
+- **베이스 라인**: 루트 노트 + 서브 옥타브
+- **멜로디**: 16노트 패턴 루프
+- **드럼**: 킥 (1, 3박) + 하이햇 (모든 박)
+
+### 3. 코드 진행
+```javascript
+// Counter BGM (C Major - 팝 진행)
+chords: [C, Am, F, G]
+bass: [C3, A2, F2, G2]
+
+// Kitchen BGM (A Minor - 집중 모드)
+chords: [Am, Dm, E, Am]
+
+// Minigame BGM (E Minor - 긴장감)
+chords: [Em, C, D, Em]
+```
+
+### 4. 주요 메서드
+| 메서드 | 설명 |
+|--------|------|
+| `startBGM(type, fadeIn)` | BGM 시작 (페이드 인 옵션) |
+| `stopBGM(fadeOut)` | BGM 정지 (페이드 아웃 옵션) |
+| `switchBGM(type, duration)` | 크로스페이드 전환 |
+| `pauseBGM()` | BGM 일시정지 |
+| `resumeBGM()` | BGM 재개 |
+| `setBGMVolume(value)` | BGM 볼륨 조절 (0~1) |
+| `setSFXVolume(value)` | SFX 볼륨 조절 (0~1) |
+
+### 5. 씬 통합
+| 씬 | BGM 이벤트 |
+|----|----------|
+| CounterScene | create() 시 `counter` 시작, 주방 이동 시 `kitchen` 전환, wake 시 `counter` 복귀 |
+| KitchenScene | wake/resume 시 `kitchen` 시작, 카운터 이동 시 `counter` 전환 |
+| KadaifSliceScene | create() 시 `minigame` 전환 |
+| PistachioCrushScene | create() 시 `minigame` 전환 |
+| MarshmallowMeltScene | create() 시 `minigame` 전환 |
+| UIScene | 설정 모달에서 BGM/SFX 볼륨 조절 |
+
+### 6. 오디오 라우팅
+```
+[오실레이터/노이즈] → [필터] → [Gain]
+                                  ↓
+                           [BGM Gain] → [Master Gain] → [Output]
+                           [SFX Gain] ↗
+```
+
+### 수정된 파일
+- `src/core/SoundManager.js` - BGM 시스템 추가 (~350줄 추가)
+- `src/phaser/scenes/CounterScene.js` - BGM 시작/전환 코드
+- `src/phaser/scenes/KitchenScene.js` - BGM 전환 + resume 핸들러
+- `src/phaser/scenes/minigames/KadaifSliceScene.js` - minigame BGM 전환
+- `src/phaser/scenes/minigames/PistachioCrushScene.js` - minigame BGM 전환
+- `src/phaser/scenes/minigames/MarshmallowMeltScene.js` - minigame BGM 전환
+- `src/phaser/scenes/UIScene.js` - soundManager 볼륨 연동
+
+---
+
+## Phase 11: 추가 기능 (예정) 📋
 
 - [ ] 단골 손님 호감도 시스템 강화
 - [ ] 업적 시스템
 - [ ] 리더보드
 - [ ] 실제 이미지 에셋 적용
-- [ ] BGM 추가
+- [x] BGM 추가 ✅
 - [ ] 진동 피드백 (모바일)
 - [ ] PWA 설정
 
@@ -772,7 +1678,7 @@ PIXEL_FONT = {
 
 - [ ] 버그 수정 및 최적화
 - [ ] 밸런스 조정
-- [ ] 사운드 볼륨 조절 UI
+- [x] 사운드 볼륨 조절 UI ✅
 - [ ] 저장/불러오기 완성
 - [ ] 프로덕션 빌드 테스트
 - [ ] 배포
@@ -785,10 +1691,11 @@ PIXEL_FONT = {
 |------|------|
 | 빌드 | Vite |
 | 언어 | Vanilla JavaScript (ES6+) |
-| 렌더링 | HTML5 Canvas API |
+| 게임 엔진 | Phaser.js v3 |
+| 렌더링 | WebGL / Canvas (Phaser AUTO) |
 | 사운드 | Web Audio API (프로시저럴) |
 | 저장 | localStorage |
-| 패턴 | State Machine |
+| 패턴 | Singleton (GameManager), Scene-based Architecture |
 
 ---
 
@@ -798,3 +1705,108 @@ PIXEL_FONT = {
 - 개발자 모드: `?dev` URL 파라미터 (스킵 버튼 표시)
 - 자동 스킵: `?skip` URL 파라미터 (인트로/튜토리얼 건너뜀)
 - 해상도: 390x844 (모바일 기준)
+
+---
+
+## Phase 10.8: 전체 비주얼 폴리싱 ✅
+**완료일: 2026-01-18**
+
+### 개요
+게임 전반의 미감을 개선하여 프리미엄 베이커리 타이쿤 느낌의 고품질 비주얼 구현.
+
+### 1. GameConfig 색상 팔레트 확장
+
+#### 추가된 색상 상수
+| 구분 | 색상 | 용도 |
+|------|------|------|
+| 배경 그라데이션 | `bgGradientTop/Bottom` | 그라데이션 배경 |
+| 카운터 목재 | `counterWoodLight/Dark` | 카운터 하이라이트/그림자 |
+| UI 버튼 | `primaryLight/Dark`, `successLight/Dark` 등 | 버튼 상태별 색상 |
+| 글로우 이펙트 | `glowGold`, `glowSuccess`, `glowMagic` | 발광 효과 |
+| 진행 바 | `progressBg`, `progressFill`, `progressGlow` | 진행률 UI |
+
+#### 새로운 Export
+```javascript
+export const GRADIENTS = {
+  warmBg: [0xFFF8F0, 0xF5E6CA],
+  woodGrain: [0x8D6E63, 0x6D4C41, 0x4E342E],
+  goldShine: [0xFFE082, 0xFFB74D, 0xFF8F00]
+};
+
+export const SHADOWS = {
+  button: { offsetX: 3, offsetY: 3, color: 0x000000, alpha: 0.25 },
+  card: { offsetX: 0, offsetY: 4, color: 0x000000, alpha: 0.15 }
+};
+```
+
+### 2. CounterScene 비주얼 개선
+
+| 요소 | 개선 내용 |
+|------|----------|
+| 벽면 | 그라데이션 배경 + 텍스처 패턴 (세로 줄무늬) |
+| 바닥 | 체커보드 타일 + 하이라이트/그림자 |
+| 창문 | 하늘 그라데이션 + 구름 장식 + 커튼 |
+| 간판 | 그림자 + 장식 프레임 + 이모지 아이콘 |
+| 벽 장식 | 액자 (두쫀쿠 아이콘) 추가 |
+| 카운터 | 대리석 상판 + 목재 패널 + 쿠키 디스플레이 + 스파클 효과 |
+
+### 3. KitchenScene 비주얼 개선
+
+| 요소 | 개선 내용 |
+|------|----------|
+| 벽면 | 그라데이션 + 미세 타일 패턴 |
+| 선반 | 조미료 장식 (🧂🫒🍯) |
+| 바닥 타일 | 상세한 하이라이트/그림자 |
+| 작업대 | 다리 추가 + 그라데이션 상판 + 나무 결 곡선 |
+| 오븐 | 메탈릭 그라데이션 + 창문 반사 + LED 인디케이터 |
+
+### 4. 미니게임 비주얼 개선
+
+#### KadaifSliceScene
+- 도마 질감의 나무 바닥 (그라데이션 + 나무결)
+- 빛 줄기 효과 (상단에서 내려오는)
+- 반짝이는 별 패턴 (애니메이션)
+- 카다이프 아이콘 장식
+- 고급 UI 패널 (그라데이션 배경 + 장식선)
+
+#### PistachioCrushScene
+- 숲 분위기 배경 (산 실루엣)
+- 나뭇잎 떨어지는 애니메이션
+- 나무 바닥 질감
+- 부드러운 빛 효과 오버레이
+- 자연 느낌의 UI 패널 (초록 테마)
+
+#### MarshmallowMeltScene
+- 주방 분위기 타일 패턴
+- 가스레인지 디테일 (버너 링)
+- 조리 장식 아이콘 (🍳🥄🧂)
+- 따뜻한 조명 효과
+- 따뜻한 색상의 UI 패널
+
+### 5. UIScene 헤더/모달 개선
+
+#### 헤더
+- 그라데이션 배경 + 상단 하이라이트
+- 골드 영역 배경 (둥근 모서리)
+- 설정 버튼 호버 효과
+- 일차/평판 영역 배경
+
+#### 대기 주문 패널
+- 그라데이션 배경 + 둥근 모서리
+- 슬롯 번호 표시 (빈 상태)
+- 슬롯 그림자 효과
+
+#### 설정 모달
+- 모달 그림자 + 둥근 모서리
+- 그라데이션 배경
+- 상단 장식 바
+- 볼륨 바: 하이라이트 + 핸들 + 퍼센트 표시
+
+### 수정된 파일
+- `src/phaser/config/GameConfig.js` - 색상 팔레트 확장
+- `src/phaser/scenes/CounterScene.js` - 배경/카운터 비주얼
+- `src/phaser/scenes/KitchenScene.js` - 배경/작업대/오븐 비주얼
+- `src/phaser/scenes/minigames/KadaifSliceScene.js` - 배경/UI 개선
+- `src/phaser/scenes/minigames/PistachioCrushScene.js` - 배경/UI 개선
+- `src/phaser/scenes/minigames/MarshmallowMeltScene.js` - 배경/UI 개선
+- `src/phaser/scenes/UIScene.js` - 헤더/모달 개선
